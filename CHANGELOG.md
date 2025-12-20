@@ -1,3 +1,11 @@
+# [0.7.0](https://github.com/bauer-group/DC-Coolify/compare/v0.6.0...v0.7.0) (2025-12-20)
+
+
+### Features
+
+* update install and setup scripts for improved functionality ([56eb9fe](https://github.com/bauer-group/DC-Coolify/commit/56eb9feff007cc24ddbc51756d41a127f2faa9e6))
+* update README and add install script for one-line installation options ([6954a20](https://github.com/bauer-group/DC-Coolify/commit/6954a20e0ba16a65af65971b21c0c13871676b57))
+
 # [0.6.0](https://github.com/bauer-group/DC-Coolify/compare/v0.5.0...v0.6.0) (2025-12-20)
 
 
