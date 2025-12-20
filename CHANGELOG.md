@@ -1,3 +1,16 @@
+# [0.8.0](https://github.com/bauer-group/DC-Coolify/compare/v0.7.0...v0.8.0) (2025-12-20)
+
+
+### Bug Fixes
+
+* update watchtower image reference to remove ghcr.io prefix ([43ae173](https://github.com/bauer-group/DC-Coolify/commit/43ae1738d5372c8e917bf2ca5d741894e5628e8c))
+
+
+### Features
+
+* add update script for seamless repository updates ([cb99fec](https://github.com/bauer-group/DC-Coolify/commit/cb99fecdfe1baaa6a51d9f7c1ffc8862d7108d55))
+* update setup script for improved functionality ([543c716](https://github.com/bauer-group/DC-Coolify/commit/543c7165832de85c6a487dfc258e12cd3cd24ab3))
+
 # [0.7.0](https://github.com/bauer-group/DC-Coolify/compare/v0.6.0...v0.7.0) (2025-12-20)
 
 
