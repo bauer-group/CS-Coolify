@@ -12,16 +12,45 @@ ENV_FILE="$INSTALL_DIR/.env"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 #######################################
+# Colors and Output
+#######################################
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+print_banner() {
+    echo -e "${BLUE}"
+    echo "╔═══════════════════════════════════════════════════════════════╗"
+    echo "║                                                               ║"
+    echo "║     ██████╗ ██████╗  ██████╗ ██╗     ██╗███████╗██╗   ██╗     ║"
+    echo "║    ██╔════╝██╔═══██╗██╔═══██╗██║     ██║██╔════╝╚██╗ ██╔╝     ║"
+    echo "║    ██║     ██║   ██║██║   ██║██║     ██║█████╗   ╚████╔╝      ║"
+    echo "║    ██║     ██║   ██║██║   ██║██║     ██║██╔══╝    ╚██╔╝       ║"
+    echo "║    ╚██████╗╚██████╔╝╚██████╔╝███████╗██║██║        ██║        ║"
+    echo "║     ╚═════╝ ╚═════╝  ╚═════╝ ╚══════╝╚═╝╚═╝        ╚═╝        ║"
+    echo "║                                                               ║"
+    echo "║                      Setup Script                             ║"
+    echo "║                                                               ║"
+    echo "╚═══════════════════════════════════════════════════════════════╝"
+    echo -e "${NC}"
+}
+
+print_success() { echo -e "${GREEN}✓${NC} $1"; }
+print_warning() { echo -e "${YELLOW}!${NC} $1"; }
+print_error() { echo -e "${RED}✗${NC} $1"; }
+
+#######################################
 # Root Check
 #######################################
 if [ "$EUID" -ne 0 ]; then
-    echo "ERROR: This script must be run as root!"
+    print_error "This script must be run as root!"
     echo "Please run with 'sudo ./setup.sh'."
     exit 1
 fi
 
-echo "=== Coolify Setup Script ==="
-echo ""
+print_banner
 
 #######################################
 # 1. Create folder structure
@@ -42,7 +71,7 @@ mkdir -p /data/system/{postgres,redis,backups}
 # Installation folder
 mkdir -p "$INSTALL_DIR"
 
-echo "    Folders created."
+print_success "Folders created"
 
 #######################################
 # 2. Copy files to /opt/coolify
@@ -64,9 +93,9 @@ if [ "$SCRIPT_DIR" != "$INSTALL_DIR" ]; then
         cp -rf "$SCRIPT_DIR/server-setup" "$INSTALL_DIR/"
     fi
 
-    echo "    Files installed to $INSTALL_DIR"
+    print_success "Files installed to $INSTALL_DIR"
 else
-    echo "    Already running from $INSTALL_DIR - skipping copy."
+    print_warning "Already running from $INSTALL_DIR - skipping copy"
 fi
 
 # Make scripts executable
