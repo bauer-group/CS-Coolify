@@ -1,3 +1,10 @@
+## [0.8.1](https://github.com/bauer-group/DC-Coolify/compare/v0.8.0...v0.8.1) (2025-12-20)
+
+
+### Bug Fixes
+
+* update .gitattributes and update.sh to handle file permissions correctly ([f5602bd](https://github.com/bauer-group/DC-Coolify/commit/f5602bdbb3ad6ca6038f422fa34d99646997a56d))
+
 # [0.8.0](https://github.com/bauer-group/DC-Coolify/compare/v0.7.0...v0.8.0) (2025-12-20)
 
 
