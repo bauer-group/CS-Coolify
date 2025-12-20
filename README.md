@@ -21,7 +21,7 @@ A production-ready, self-hosted deployment of [Coolify](https://coolify.io) with
 +------------------+    +------------------+ | +------------------+
 |     Coolify      |    |      Soketi      | | |    PostgreSQL    |
 |   Application    |--->|    (Realtime)    | | |    (Database)    |
-|    Port 6000     |    |   Ports 6001/2   | | |                  |
+|    Port 8000     |    |   Ports 8001/2   | | |                  |
 +------------------+    +------------------+ | +------------------+
          |                                   |          |
          +-----------------------------------+----------+
@@ -76,7 +76,7 @@ sudo ./setup.sh
 # 3. Start the stack
 sudo ./coolify.sh start
 
-# 4. Access Coolify at http://<server-ip>:6000
+# 4. Access Coolify at http://<server-ip>:8000
 ```
 
 ## Requirements
@@ -84,7 +84,7 @@ sudo ./coolify.sh start
 - Linux server (Ubuntu 24.04 LTS recommended)
 - Docker 20.10+ with Compose v2
 - Root access
-- Ports: 6000 (Coolify), 6001-6002 (Soketi/Realtime)
+- Ports: 8000 (Coolify), 8001-8002 (Soketi/Realtime)
 
 ## File Structure
 
@@ -186,7 +186,7 @@ Edit `/opt/coolify/.env` to customize:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `APPLICATION_PORT` | 6000 | Coolify web interface port |
+| `APPLICATION_PORT` | 8000 | Coolify web interface port |
 | `COOLIFY_VERSION` | latest | Coolify image version |
 | `POSTGRES_VERSION` | 18 | PostgreSQL version |
 | `REDIS_VERSION` | 8 | Redis version |

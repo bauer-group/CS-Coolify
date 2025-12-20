@@ -76,7 +76,7 @@ services:
       expose:
         - 8080/tcp
       ports:
-        - "${APPLICATION_PORT:-6000}:8080"
+        - "${APPLICATION_PORT:-8000}:8080"
 
 
   ### Support Services ###
@@ -87,8 +87,8 @@ services:
     labels:
       - com.centurylinklabs.watchtower.enable=true
     ports:
-      - 6001:6001/tcp
-      - 6002:6002/tcp
+      - 8001:6001/tcp
+      - 8002:6002/tcp
     environment:
       - TZ=${TIME_ZONE:-UTC}
 
