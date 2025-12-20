@@ -30,7 +30,7 @@ mkdir -p /data/coolify/{ssh,applications,databases,backups,services}
 mkdir -p /data/coolify/ssh/{keys,mux}
 
 # Coolify host folders (for dynamically created containers via SSH)
-mkdir -p /data/coolify/{proxy,webhooks-during-maintenance}
+mkdir -p /data/coolify/{proxy,webhooks-during-maintenance,sentinel}
 mkdir -p /data/coolify/proxy/dynamic
 
 # System folders for databases and backups
@@ -73,15 +73,17 @@ echo "[3/5] Checking .env file..."
 if [ ! -f "$ENV_FILE" ]; then
     echo "    Creating new .env file with random values..."
 
-    # Generate secure random values
-    # Hex values for IDs (no special characters)
+    # Generate secure random values (matching official Coolify install.sh)
+    # APP_ID: 16 bytes hex = 32 characters
     GEN_APP_ID=$(openssl rand -hex 16)
-    GEN_PUSHER_APP_ID=$(openssl rand -hex 16)
-    GEN_PUSHER_APP_KEY=$(openssl rand -hex 16)
-    GEN_PUSHER_APP_SECRET=$(openssl rand -hex 32)
 
-    # Base64 for keys (Laravel format)
+    # APP_KEY: Laravel format with base64 prefix
     GEN_APP_KEY="base64:$(openssl rand -base64 32)"
+
+    # PUSHER keys: 32 bytes hex = 64 characters each
+    GEN_PUSHER_APP_ID=$(openssl rand -hex 32)
+    GEN_PUSHER_APP_KEY=$(openssl rand -hex 32)
+    GEN_PUSHER_APP_SECRET=$(openssl rand -hex 32)
 
     # Alphanumeric passwords (no special characters for DB compatibility)
     GEN_DB_PASSWORD=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 32)
