@@ -1,3 +1,10 @@
+# [0.2.0](https://github.com/bauer-group/DC-Coolify/compare/v0.1.0...v0.2.0) (2025-12-20)
+
+
+### Features
+
+* enhance do_destroy function to provide clearer warnings and remove additional resources ([0b4c682](https://github.com/bauer-group/DC-Coolify/commit/0b4c68242dd09740faefc77d100ebd61d5c58335))
+
 # [0.1.0](https://github.com/bauer-group/DC-Coolify/compare/v0.0.0...v0.1.0) (2025-12-20)
 
 
