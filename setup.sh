@@ -153,47 +153,65 @@ if [ ! -f "$ENV_FILE" ]; then
     GEN_REDIS_PASSWORD=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 32)
 
     # Root password needs at least one symbol for Coolify validation
-    # Format: 20 alphanumeric chars + symbol + 3 alphanumeric chars = 24 chars
-    GEN_ROOT_PASSWORD="$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 20)@$(openssl rand -base64 8 | tr -dc 'a-zA-Z0-9' | head -c 3)"
+    # Safe symbols that won't be interpreted by shell: @ # % _ - .
+    # Avoid: $ ` ! \ ' " ( ) { } [ ] < > | & ; * ? ~
+    SAFE_SYMBOLS='@#%-_.'
+    RANDOM_SYMBOL=${SAFE_SYMBOLS:$((RANDOM % ${#SAFE_SYMBOLS})):1}
+    GEN_ROOT_PASSWORD="$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 12)${RANDOM_SYMBOL}$(openssl rand -base64 16 | tr -dc 'a-zA-Z0-9' | head -c 11)"
 
-    # Create .env
-    cat > "$ENV_FILE" << EOF
+    # Pre-compute values that need command substitution
+    GEN_DATE=$(date)
+    GEN_SERVER=$(hostname)
+    GEN_EMAIL="admin@$(hostname -f 2>/dev/null || echo "localhost")"
+    GEN_TIMEZONE=$(cat /etc/timezone 2>/dev/null || echo "UTC")
+
+    # Create .env (using 'EOF' to prevent any variable expansion, then write values explicitly)
+    cat > "$ENV_FILE" << 'ENVFILE'
 ###############################################################################
 # Coolify Environment Configuration
-# Generated: $(date)
-# Server: $(hostname)
 ###############################################################################
 
 ###############################################################################
 # APPLICATION - Required
 ###############################################################################
-APP_ID=${GEN_APP_ID}
-APP_KEY=${GEN_APP_KEY}
+ENVFILE
 
-###############################################################################
-# DATABASE (PostgreSQL) - Required
-###############################################################################
-DB_PASSWORD=${GEN_DB_PASSWORD}
+    # Write generated values (escaped to handle special characters)
+    {
+        echo "# Generated: $GEN_DATE"
+        echo "# Server: $GEN_SERVER"
+        echo ""
+        echo "APP_ID=$GEN_APP_ID"
+        echo "APP_KEY=$GEN_APP_KEY"
+        echo ""
+        echo "###############################################################################"
+        echo "# DATABASE (PostgreSQL) - Required"
+        echo "###############################################################################"
+        echo "DB_PASSWORD=$GEN_DB_PASSWORD"
+        echo ""
+        echo "###############################################################################"
+        echo "# REDIS - Required"
+        echo "###############################################################################"
+        echo "REDIS_PASSWORD=$GEN_REDIS_PASSWORD"
+        echo ""
+        echo "###############################################################################"
+        echo "# PUSHER/SOKETI (Realtime) - Required"
+        echo "###############################################################################"
+        echo "PUSHER_APP_ID=$GEN_PUSHER_APP_ID"
+        echo "PUSHER_APP_KEY=$GEN_PUSHER_APP_KEY"
+        echo "PUSHER_APP_SECRET=$GEN_PUSHER_APP_SECRET"
+        echo ""
+        echo "###############################################################################"
+        echo "# ROOT USER (Admin Account) - Required"
+        echo "###############################################################################"
+        echo "ROOT_USERNAME=admin"
+        echo "ROOT_USER_EMAIL=$GEN_EMAIL"
+        echo "ROOT_USER_PASSWORD=$GEN_ROOT_PASSWORD"
+        echo ""
+    } >> "$ENV_FILE"
 
-###############################################################################
-# REDIS - Required
-###############################################################################
-REDIS_PASSWORD=${GEN_REDIS_PASSWORD}
-
-###############################################################################
-# PUSHER/SOKETI (Realtime) - Required
-###############################################################################
-PUSHER_APP_ID=${GEN_PUSHER_APP_ID}
-PUSHER_APP_KEY=${GEN_PUSHER_APP_KEY}
-PUSHER_APP_SECRET=${GEN_PUSHER_APP_SECRET}
-
-###############################################################################
-# ROOT USER (Admin Account) - Required
-###############################################################################
-ROOT_USERNAME=admin
-ROOT_USER_EMAIL=admin@$(hostname -f 2>/dev/null || echo "localhost")
-ROOT_USER_PASSWORD=${GEN_ROOT_PASSWORD}
-
+    # Append static configuration
+    cat >> "$ENV_FILE" << ENVFILE
 ###############################################################################
 # VERSIONS - Optional (defaults in docker-compose.yml)
 ###############################################################################
@@ -205,7 +223,7 @@ ROOT_USER_PASSWORD=${GEN_ROOT_PASSWORD}
 ###############################################################################
 # TIMEZONE - Optional (automatically detected from host)
 ###############################################################################
-TIME_ZONE=$(cat /etc/timezone 2>/dev/null || echo "UTC")
+TIME_ZONE=$GEN_TIMEZONE
 
 ###############################################################################
 # NETWORK - Optional (defaults in docker-compose.yml)
@@ -235,7 +253,7 @@ TIME_ZONE=$(cat /etc/timezone 2>/dev/null || echo "UTC")
 ###############################################################################
 #REDIS_MEMORYLIMIT=1gb
 
-EOF
+ENVFILE
 
     print_success ".env file created"
     echo ""

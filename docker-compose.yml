@@ -167,9 +167,11 @@ services:
 
   ### Auto-Update Service ###
   watchtower:
-    image: containrrr/watchtower:latest
+    image: marrrrrrrrry/watchtower:latest
     restart: unless-stopped
     container_name: COOLIFY_WATCHTOWER
+    # labels:
+    #   - com.centurylinklabs.watchtower.enable=true
     environment:
       - TZ=${TIME_ZONE:-UTC}
       - WATCHTOWER_CLEANUP=true
