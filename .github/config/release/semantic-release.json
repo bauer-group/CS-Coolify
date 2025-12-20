@@ -6,19 +6,13 @@
     [
       "@semantic-release/changelog",
       {
-        "changelogFile": "CHANGELOG.MD"
-      }
-    ],
-    [
-      "@semantic-release/npm",
-      {
-        "npmPublish": false
+        "changelogFile": "CHANGELOG.md"
       }
     ],
     [
       "@semantic-release/git",
       {
-        "assets": ["package.json", "package-lock.json", "CHANGELOG.MD"],
+        "assets": ["CHANGELOG.md"],
         "message": "chore(release): ${nextRelease.version}\n\n${nextRelease.notes}"
       }
     ],
