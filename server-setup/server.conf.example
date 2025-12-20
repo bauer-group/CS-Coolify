@@ -1,0 +1,36 @@
+#######################################
+# Server Configuration
+# Copy to server.conf and customize
+#######################################
+
+#######################################
+# Basic Settings
+#######################################
+HOSTNAME="coolify-server"
+LOCALE="de_DE.UTF-8"
+TIMEZONE="Europe/Berlin"
+
+#######################################
+# NTP Servers
+#######################################
+NTP_SERVERS="time.bauer-group.com 0.de.pool.ntp.org 1.de.pool.ntp.org 2.de.pool.ntp.org 3.de.pool.ntp.org"
+NTP_FALLBACK="ptbtime1.ptb.de ptbtime2.ptb.de ptbtime3.ptb.de"
+
+#######################################
+# Network Configuration
+# Leave empty to skip network setup (use DHCP)
+#######################################
+
+# MAC address of primary interface (required for netplan)
+NETWORK_MAC="0a:e7:f9:c2:a8:59"
+
+# IPv4 Configuration
+NETWORK_IPV4="159.195.67.101"
+NETWORK_IPV4_NETMASK="22"
+NETWORK_IPV4_GATEWAY="159.195.64.1"
+
+# IPv6 Configuration
+# Multiple addresses can be specified (space-separated)
+# Example: "2a0a:4cc0:c2:17d6::1/64 2a0a:4cc0:c2:17d6::2/64"
+NETWORK_IPV6="2a0a:4cc0:c2:17d6::1/64 2a0a:4cc0:c2:17d6::2/64"
+NETWORK_IPV6_GATEWAY="fe80::1"

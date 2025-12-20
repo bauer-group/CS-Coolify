@@ -1,0 +1,198 @@
+version: "3"
+
+### Services ###
+services:
+  ### Main Application ###
+  coolify:
+      image: ghcr.io/coollabsio/coolify:${COOLIFY_VERSION:-latest}
+      container_name: COOLIFY_APPLICATION
+      restart: unless-stopped
+      labels:
+        - com.centurylinklabs.watchtower.enable=true
+      environment:
+        - TZ=${TIME_ZONE:-UTC}
+
+        - APP_ENV=production
+        - PHP_MEMORY_LIMIT=${COOLIFY_PHP_MEMORY_LIMIT:-256M}
+        - PHP_FPM_PM_CONTROL=${COOLIFY_PHP_FPM_PM_CONTROL:-dynamic}
+        - PHP_FPM_PM_START_SERVERS=${COOLIFY_PHP_FPM_PM_START_SERVERS:-1}
+        - PHP_FPM_PM_MIN_SPARE_SERVERS=${COOLIFY_PHP_FPM_PM_MIN_SPARE_SERVERS:-1}
+        - PHP_FPM_PM_MAX_SPARE_SERVERS=${COOLIFY_PHP_FPM_PM_MAX_SPARE_SERVERS:-10}
+
+        - APP_NAME=coolify
+        - APP_ID=${APP_ID}
+        - APP_KEY=${APP_KEY}
+
+        - DATABASE_URL=pgsql://coolify:${DB_PASSWORD}@database-server:5432/coolify
+        - DB_HOST=database-server
+        - DB_PORT=5432
+        - DB_USERNAME=coolify
+        - DB_PASSWORD=${DB_PASSWORD}
+
+        - REDIS_URL=redis://:${REDIS_PASSWORD}@redis-server:6379/0
+        - REDIS_HOST=redis-server
+        - REDIS_PORT=6379
+        - REDIS_DB=0
+        - REDIS_PASSWORD=${REDIS_PASSWORD}
+
+        - PUSHER_APP_ID=${PUSHER_APP_ID}
+        - PUSHER_APP_KEY=${PUSHER_APP_KEY}
+        - PUSHER_APP_SECRET=${PUSHER_APP_SECRET}
+        - PUSHER_HOST=soketi-server
+        - PUSHER_PORT=6001
+
+        - SSH_MUX_ENABLED=false
+        - SELF_HOSTED=true
+
+        - ROOT_USERNAME=${ROOT_USERNAME}
+        - ROOT_USER_EMAIL=${ROOT_USER_EMAIL}
+        - ROOT_USER_PASSWORD=${ROOT_USER_PASSWORD}
+      working_dir: /var/www/html
+      extra_hosts:
+          - host.docker.internal:host-gateway
+      volumes:
+        - type: bind
+          source: /opt/coolify/.env
+          target: /var/www/html/.env
+          read_only: true
+        - /data/coolify/ssh:/var/www/html/storage/app/ssh
+        - /data/coolify/applications:/var/www/html/storage/app/applications
+        - /data/coolify/databases:/var/www/html/storage/app/databases
+        - /data/coolify/services:/var/www/html/storage/app/services
+        - /data/coolify/backups:/var/www/html/storage/app/backups      
+      networks:
+        - coolify
+      healthcheck:
+        test: curl --fail http://127.0.0.1:8080/api/health || exit 1
+        interval: 5s
+        retries: 10
+        timeout: 2s
+      depends_on:
+        database-server:
+          condition: service_healthy
+        redis-server:
+          condition: service_healthy
+        soketi-server:
+          condition: service_healthy
+      expose:
+        - 8080/tcp
+      ports:
+        - "${APPLICATION_PORT:-6000}:8080"
+
+
+  ### Support Services ###
+  soketi-server:
+    image: ghcr.io/coollabsio/coolify-realtime:${SOCKETI_VERSION:-1.0.10}
+    restart: unless-stopped
+    container_name: COOLIFY_REALTIME
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+    ports:
+      - 6001:6001/tcp
+      - 6002:6002/tcp
+    environment:
+      - TZ=${TIME_ZONE:-UTC}
+
+      - APP_NAME=coolify
+      - SOKETI_DEBUG=false
+      - SOKETI_DEFAULT_APP_ID=${PUSHER_APP_ID}
+      - SOKETI_DEFAULT_APP_KEY=${PUSHER_APP_KEY}
+      - SOKETI_DEFAULT_APP_SECRET=${PUSHER_APP_SECRET}
+    volumes:
+      - /data/coolify/ssh:/var/www/html/storage/app/ssh
+    networks:
+      - coolify
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:6001/ready && wget -qO- http://127.0.0.1:6002/ready || exit 1" ]
+      interval: 5s
+      retries: 10
+      timeout: 2s
+
+  database-server:
+    image: postgres:${POSTGRES_VERSION:-18}
+    restart: unless-stopped
+    container_name: COOLIFY_DATABASE
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+    command: -c max_connections=${DATABASE_POOLMAXSIZE:-100}
+    environment:
+      - TZ=${TIME_ZONE:-UTC}
+      - PG_TZ=${TIME_ZONE:-UTC}
+
+      - POSTGRES_DB=coolify
+      - POSTGRES_USER=coolify
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    expose:
+      - 5432/tcp
+    volumes:      
+      - /data/system/postgres:/var/lib/postgresql/data
+    networks:
+      coolify:
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U coolify -d coolify" ]
+      interval: 5s
+      retries: 10
+      timeout: 2s
+
+  redis-server:
+    image: redis:${REDIS_VERSION:-8}
+    restart: unless-stopped
+    container_name: COOLIFY_REDIS
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+    command: >
+      redis-server
+      --port 6379
+      --loglevel warning
+      --maxmemory ${REDIS_MEMORYLIMIT:-1gb}
+      --maxmemory-policy volatile-lru
+      --requirepass ${REDIS_PASSWORD}
+      --appendonly yes
+      --save 60 1
+    environment:
+      - TZ=${TIME_ZONE:-UTC}
+    expose:
+      - 6379/tcp
+    volumes:
+      - /data/system/redis:/data
+    networks:
+      coolify:
+    healthcheck:
+      test: [ "CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} ping | grep PONG" ]
+      interval: 5s
+      retries: 10
+      timeout: 2s
+
+
+  ### Auto-Update Service ###
+  watchtower:
+    image: containrrr/watchtower:latest
+    restart: unless-stopped
+    container_name: COOLIFY_WATCHTOWER
+    environment:
+      - TZ=${TIME_ZONE:-UTC}
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_INCLUDE_STOPPED=false
+      - WATCHTOWER_ROLLING_RESTART=true
+      - WATCHTOWER_LABEL_ENABLE=true
+      - WATCHTOWER_SCHEDULE=0 0 3 * * 6
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - coolify
+
+
+### Networks ###
+networks:
+  coolify:
+    driver: bridge
+    name: COOLIFY
+    enable_ipv6: true    
+    driver_opts:
+      com.docker.network.enable_ipv6: "true"    
+    ipam:
+      config:
+      - subnet: 10.0.0.0/24
+        gateway: 10.0.0.1
+      - subnet: fdfd:10:0::/64
+        gateway: fdfd:10:0::1
