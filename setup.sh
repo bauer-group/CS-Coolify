@@ -121,9 +121,9 @@ if [ ! -f "$SSH_KEY" ]; then
     sort -u ~/.ssh/authorized_keys -o ~/.ssh/authorized_keys
 
     chmod 600 ~/.ssh/authorized_keys
-    echo "    SSH key created and authorized_keys updated."
+    print_success "SSH key created and authorized_keys updated"
 else
-    echo "    SSH key already exists."
+    print_warning "SSH key already exists"
 fi
 
 #######################################
@@ -228,17 +228,17 @@ TIME_ZONE=$(cat /etc/timezone 2>/dev/null || echo "UTC")
 
 EOF
 
-    echo "    .env file created."
+    print_success ".env file created"
     echo ""
-    echo "    +----------------------------------------+"
-    echo "    |  GENERATED CREDENTIALS                 |"
-    echo "    +----------------------------------------+"
-    echo "    |  Username: admin                       |"
-    echo "    |  Password: ${GEN_ROOT_PASSWORD}  |"
-    echo "    +----------------------------------------+"
+    echo -e "${GREEN}╔════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║  GENERATED CREDENTIALS                 ║${NC}"
+    echo -e "${GREEN}╠════════════════════════════════════════╣${NC}"
+    echo -e "${GREEN}║${NC}  Username: ${BLUE}admin${NC}                       ${GREEN}║${NC}"
+    echo -e "${GREEN}║${NC}  Password: ${BLUE}${GEN_ROOT_PASSWORD}${NC}  ${GREEN}║${NC}"
+    echo -e "${GREEN}╚════════════════════════════════════════╝${NC}"
     echo ""
 else
-    echo "    .env file already exists - no changes."
+    print_warning ".env file already exists - no changes"
 fi
 
 #######################################
@@ -265,33 +265,28 @@ chmod -R 700 /data/system/redis
 chown 9999:root "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 
-echo "    Permissions set."
+print_success "Permissions set"
 
 #######################################
 # 6. Summary
 #######################################
-echo "[6/6] Setup completed!"
 echo ""
-echo "=== Installation ==="
-echo "Location: $INSTALL_DIR"
+echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║                    Setup Complete!                            ║${NC}"
+echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo "=== Folder Structure ==="
-echo "/data/coolify/"
-echo "  ssh/  applications/  databases/  backups/  services/"
-echo "  proxy/  webhooks-during-maintenance/  sentinel/"
+echo -e "${BLUE}Installation:${NC} $INSTALL_DIR"
+echo -e "${BLUE}Config file:${NC}  $ENV_FILE"
 echo ""
-echo "/data/system/"
-echo "  postgres/  redis/  backups/"
+echo -e "${YELLOW}Next Steps:${NC}"
+echo "  1. Optional: Edit $ENV_FILE (email, timezone, etc.)"
+echo "  2. Start Coolify:"
+echo -e "     ${BLUE}cd $INSTALL_DIR && sudo ./coolify.sh start${NC}"
 echo ""
-echo "=== Configuration ==="
-echo "ENV file: $ENV_FILE"
+IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+IP=${IP:-localhost}
+echo -e "  3. Access Coolify at: ${BLUE}http://${IP}:8000${NC}"
 echo ""
-echo "=== Next Steps ==="
-echo "1. Optional: Edit $ENV_FILE (email, timezone, etc.)"
-echo "2. cd $INSTALL_DIR && sudo ./coolify.sh start"
-echo "3. Browser: http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost"):8000"
-echo ""
-echo "=== Management ==="
-echo "cd $INSTALL_DIR"
-echo "./coolify.sh start|stop|restart|status|logs|update|backup|restore|destroy|help"
+echo -e "${YELLOW}Management:${NC}"
+echo "  ./coolify.sh start|stop|restart|status|logs|update|backup|restore|destroy|help"
 echo ""
