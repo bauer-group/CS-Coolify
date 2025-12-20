@@ -1,3 +1,11 @@
+# [0.4.0](https://github.com/bauer-group/DC-Coolify/compare/v0.3.0...v0.4.0) (2025-12-20)
+
+
+### Features
+
+* add --wait option to stack management commands for improved startup handling ([185bbd0](https://github.com/bauer-group/DC-Coolify/commit/185bbd0eb81f18b5ea32e823b0844da7c13a01d2))
+* update application ports from 6000 to 8000 in README, docker-compose, and setup script ([05dc73b](https://github.com/bauer-group/DC-Coolify/commit/05dc73bfb767f1a87fbaa9185edc08eee62e298f))
+
 # [0.3.0](https://github.com/bauer-group/DC-Coolify/compare/v0.2.0...v0.3.0) (2025-12-20)
 
 
