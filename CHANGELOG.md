@@ -1,3 +1,10 @@
+## [0.8.3](https://github.com/bauer-group/DC-Coolify/compare/v0.8.2...v0.8.3) (2025-12-20)
+
+
+### Bug Fixes
+
+* update watchtower image and enhance root password generation in setup script ([00ac6c1](https://github.com/bauer-group/DC-Coolify/commit/00ac6c1fd95a64645dc45537c69913c6e5f22635))
+
 ## [0.8.2](https://github.com/bauer-group/DC-Coolify/compare/v0.8.1...v0.8.2) (2025-12-20)
 
 
