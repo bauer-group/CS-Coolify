@@ -1,3 +1,10 @@
+# [0.3.0](https://github.com/bauer-group/DC-Coolify/compare/v0.2.0...v0.3.0) (2025-12-20)
+
+
+### Features
+
+* update README with improved setup instructions and add stack update guidelines ([a02a2cb](https://github.com/bauer-group/DC-Coolify/commit/a02a2cba757920fc86a01ddc4b9fc42bea58c8d0))
+
 # [0.2.0](https://github.com/bauer-group/DC-Coolify/compare/v0.1.0...v0.2.0) (2025-12-20)
 
 
