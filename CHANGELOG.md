@@ -1,3 +1,11 @@
+# [0.1.0](https://github.com/bauer-group/DC-Coolify/compare/v0.0.0...v0.1.0) (2025-12-20)
+
+
+### Features
+
+* enhance setup script by adding missing sentinel folder and updating random value generation for .env file ([647749c](https://github.com/bauer-group/DC-Coolify/commit/647749c1cb9be9de855e46de5357cc6cf1a21771))
+* update setup script to include file copying and enhance folder structure creation ([a225a71](https://github.com/bauer-group/DC-Coolify/commit/a225a714868d13e86b1cca01680718298b492090))
+
 # 1.0.0 (2025-12-20)
 
 
