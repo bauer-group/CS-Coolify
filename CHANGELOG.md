@@ -1,3 +1,11 @@
+# [0.5.0](https://github.com/bauer-group/DC-Coolify/compare/v0.4.0...v0.5.0) (2025-12-20)
+
+
+### Features
+
+* add .gitattributes file to manage line endings and binary files ([c907229](https://github.com/bauer-group/DC-Coolify/commit/c907229d56bef0a2d73481cd953c3407a186ccbe))
+* update watchtower image reference to use ghcr.io in README and docker-compose ([5c0d5e6](https://github.com/bauer-group/DC-Coolify/commit/5c0d5e682dc66b06e20fdce55bdcf862d81ce40c))
+
 # [0.4.0](https://github.com/bauer-group/DC-Coolify/compare/v0.3.0...v0.4.0) (2025-12-20)
 
 
