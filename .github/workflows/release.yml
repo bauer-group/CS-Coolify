@@ -1,4 +1,4 @@
-name: Release
+name: 🚀 Release
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       force-release:
-        description: 'force create release'
+        description: 'Force create release'
         type: boolean
         default: false
 
@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   release:
-    name: Create Semantic Release
+    name: 📦 Create Semantic Release
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     uses: bauer-group/automation-templates/.github/workflows/modules-semantic-release.yml@main
     with:
