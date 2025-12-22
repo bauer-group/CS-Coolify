@@ -1,3 +1,10 @@
+## [0.8.8](https://github.com/bauer-group/DC-Coolify/compare/v0.8.7...v0.8.8) (2025-12-22)
+
+
+### Bug Fixes
+
+* rename coolify-application container to coolify for consistency ([1bf9f1e](https://github.com/bauer-group/DC-Coolify/commit/1bf9f1e6eadef454933313ddf135d83193367cd8))
+
 ## [0.8.7](https://github.com/bauer-group/DC-Coolify/compare/v0.8.6...v0.8.7) (2025-12-22)
 
 
