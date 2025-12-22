@@ -34,3 +34,14 @@ NETWORK_IPV4_GATEWAY="159.195.64.1"
 # Example: "2a0a:4cc0:c2:17d6::1/64 2a0a:4cc0:c2:17d6::2/64"
 NETWORK_IPV6="2a0a:4cc0:c2:17d6::1/64 2a0a:4cc0:c2:17d6::2/64"
 NETWORK_IPV6_GATEWAY="fe80::1"
+
+#######################################
+# Coolify Settings
+# Used by setup.sh for .env generation
+#######################################
+
+# PUSHER_HOST: Must be reachable from browser (IP or FQDN)
+# Use server IP for direct access, or domain if using reverse proxy
+# Example with domain: "realtime.example.com"
+#PUSHER_HOST="159.195.67.101"
+#PUSHER_PORT=6001

@@ -164,6 +164,11 @@ if [ ! -f "$ENV_FILE" ]; then
     GEN_SERVER=$(hostname)
     GEN_EMAIL="admin@$(hostname -f 2>/dev/null || echo "localhost")"
     GEN_TIMEZONE=$(cat /etc/timezone 2>/dev/null || echo "UTC")
+    GEN_SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+    GEN_SERVER_IP=${GEN_SERVER_IP:-localhost}
+    # Use PUSHER_HOST from config if set, otherwise use server IP
+    GEN_PUSHER_HOST=${PUSHER_HOST:-$GEN_SERVER_IP}
+    GEN_PUSHER_PORT=${PUSHER_PORT:-6001}
 
     # Create .env (using 'EOF' to prevent any variable expansion, then write values explicitly)
     cat > "$ENV_FILE" << 'ENVFILE'
@@ -196,10 +201,13 @@ ENVFILE
         echo ""
         echo "###############################################################################"
         echo "# PUSHER/SOKETI (Realtime) - Required"
+        echo "# PUSHER_HOST must be reachable from browser (IP or FQDN, NOT container name)"
         echo "###############################################################################"
         echo "PUSHER_APP_ID=$GEN_PUSHER_APP_ID"
         echo "PUSHER_APP_KEY=$GEN_PUSHER_APP_KEY"
         echo "PUSHER_APP_SECRET=$GEN_PUSHER_APP_SECRET"
+        echo "PUSHER_HOST=$GEN_PUSHER_HOST"
+        echo "PUSHER_PORT=$GEN_PUSHER_PORT"
         echo ""
         echo "###############################################################################"
         echo "# ROOT USER (Admin Account) - Required"
