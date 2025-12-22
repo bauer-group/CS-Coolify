@@ -20,8 +20,47 @@ permissions:
   pull-requests: write
 
 jobs:
+  validate-compose:
+    name: 🐳 Validate Docker Compose
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 📝 Create dummy .env
+        run: |
+          cat > .env << 'EOF'
+          APP_ID=test
+          APP_KEY=base64:test
+          DB_PASSWORD=test
+          REDIS_PASSWORD=test
+          PUSHER_APP_ID=test
+          PUSHER_APP_KEY=test
+          PUSHER_APP_SECRET=test
+          ROOT_USERNAME=admin
+          ROOT_USER_EMAIL=test@test.com
+          ROOT_USER_PASSWORD=test
+          EOF
+
+      - name: 🔍 Validate docker-compose.yml
+        run: docker compose -f docker-compose.yml config --quiet
+
+  validate-shellscript:
+    name: 🐚 Shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🔍 Run Shellcheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: '.'
+          severity: warning
+
   release:
     name: 📦 Create Semantic Release
+    needs: [validate-compose, validate-shellscript]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     uses: bauer-group/automation-templates/.github/workflows/modules-semantic-release.yml@main
     with:
