@@ -1,3 +1,12 @@
+## [0.8.4](https://github.com/bauer-group/DC-Coolify/compare/v0.8.3...v0.8.4) (2025-12-21)
+
+
+### Bug Fixes
+
+* standardize container names in docker-compose.yml to lowercase ([eba6177](https://github.com/bauer-group/DC-Coolify/commit/eba617723d847d739a04cc0367230e3285e1b182))
+* update container names in coolify.sh to lowercase ([fb5810e](https://github.com/bauer-group/DC-Coolify/commit/fb5810e7578b697ae23a7a4f681346c7b2e063b0))
+* update default application port from 6000 to 8000 in coolify.sh and README.md ([6abee7b](https://github.com/bauer-group/DC-Coolify/commit/6abee7bdf31a6f1750d1850c8a14860579708025))
+
 ## [0.8.3](https://github.com/bauer-group/DC-Coolify/compare/v0.8.2...v0.8.3) (2025-12-20)
 
 
