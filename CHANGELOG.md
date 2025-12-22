@@ -1,3 +1,10 @@
+## [0.8.5](https://github.com/bauer-group/DC-Coolify/compare/v0.8.4...v0.8.5) (2025-12-22)
+
+
+### Bug Fixes
+
+* update network configurations for Docker with new IPv4 and IPv6 ranges ([a33c0e3](https://github.com/bauer-group/DC-Coolify/commit/a33c0e3f3d67f862e7ef7c6166c9e025a8d762bd))
+
 ## [0.8.4](https://github.com/bauer-group/DC-Coolify/compare/v0.8.3...v0.8.4) (2025-12-21)
 
 
