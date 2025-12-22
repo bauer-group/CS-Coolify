@@ -224,7 +224,7 @@ docker stop coolify-watchtower
 
 | Container | Image | Purpose |
 |-----------|-------|---------|
-| coolify-application | ghcr.io/coollabsio/coolify | Main application |
+| coolify | ghcr.io/coollabsio/coolify | Main application |
 | coolify-realtime | ghcr.io/coollabsio/coolify-realtime | WebSocket server (Soketi) |
 | coolify-db | postgres:18 | PostgreSQL database |
 | coolify-redis | redis:8 | Cache and queue |

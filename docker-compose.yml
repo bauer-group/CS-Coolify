@@ -3,7 +3,7 @@ services:
   ### Main Application ###
   coolify:
       image: ghcr.io/coollabsio/coolify:${COOLIFY_VERSION:-latest}
-      container_name: coolify-application
+      container_name: coolify
       restart: unless-stopped
       labels:
         - com.centurylinklabs.watchtower.enable=true

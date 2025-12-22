@@ -80,7 +80,7 @@ get_compose_cmd() {
 is_stack_running() {
     # Check if all Coolify containers are running
     local running=0
-    for container in coolify-application coolify-db coolify-redis coolify-realtime; do
+    for container in coolify coolify-db coolify-redis coolify-realtime; do
         if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
             ((running++))
         fi
@@ -90,7 +90,7 @@ is_stack_running() {
 
 is_stack_stopped() {
     # Check if all Coolify containers are stopped
-    for container in coolify-application coolify-db coolify-redis coolify-realtime; do
+    for container in coolify coolify-db coolify-redis coolify-realtime; do
         if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
             return 1
         fi
