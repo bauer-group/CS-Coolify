@@ -193,7 +193,7 @@ networks:
     enable_ipv6: true
     ipam:
       config:
-        - subnet: 10.0.0.0/24
-          gateway: 10.0.0.1
-        - subnet: fdfd:10:0::/64
-          gateway: fdfd:10:0::1
+        - subnet: 10.128.0.0/24
+          gateway: 10.128.0.1
+        - subnet: fdff:8000::/64
+          gateway: fdff:8000::1

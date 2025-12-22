@@ -71,22 +71,22 @@ EOF
 sysctl -p /etc/sysctl.d/98-docker.conf >/dev/null 2>&1 || true
 
 # Docker daemon configuration with IPv6 support
-# Network ranges:
-#   - docker0 bridge:    10.10.0.0/17     (IPv4), fdff::/64 (IPv6)
-#   - container pools:   10.10.128.0/17   (IPv4), fdff:1::/48 -> /64 per network (IPv6)
+# Network ranges (full 10.0.0.0/8 split in half):
+#   - docker0 bridge:    10.0.0.0/9   (10.0-127.x.x),   fdff::/17 (IPv6)
+#   - container pools:   10.128.0.0/9 (10.128-255.x.x), fdff:8000::/17 -> /64 per network (IPv6)
 mkdir -p /etc/docker/
 cat > /etc/docker/daemon.json << 'EOF'
 {
-  "bip": "10.10.0.1/17",
+  "bip": "10.0.0.1/9",
   "ipv6": true,
-  "fixed-cidr-v6": "fdff::/64",
+  "fixed-cidr-v6": "fdff::/17",
   "default-address-pools": [
     {
-      "base": "10.10.128.0/17",
+      "base": "10.128.0.0/9",
       "size": 24
     },
     {
-      "base": "fdff:1::/48",
+      "base": "fdff:8000::/17",
       "size": 64
     }
   ]
@@ -100,9 +100,7 @@ print_success "Docker configured with IPv6 support"
 #######################################
 echo "[5/5] Creating IPv6 NAT service..."
 
-# NAT for both IPv6 ranges:
-#   - fdff::/64     = docker0 bridge network
-#   - fdff:1::/48   = container network pool
+# NAT for all Docker IPv6 traffic (fdff::/16 covers both bridge and pool)
 cat > /usr/lib/systemd/system/docker-support.service << 'EOF'
 [Unit]
 Description=IPv6 NAT for Docker Networks
@@ -112,8 +110,8 @@ ReloadPropagatedFrom=docker.service
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c '/usr/sbin/ip6tables -t nat -A POSTROUTING -s fdff::/64 ! -o docker0 -j MASQUERADE && /usr/sbin/ip6tables -t nat -A POSTROUTING -s fdff:1::/48 ! -o docker0 -j MASQUERADE'
-ExecStop=/bin/sh -c '/usr/sbin/ip6tables -t nat -D POSTROUTING -s fdff::/64 ! -o docker0 -j MASQUERADE 2>/dev/null; /usr/sbin/ip6tables -t nat -D POSTROUTING -s fdff:1::/48 ! -o docker0 -j MASQUERADE 2>/dev/null; true'
+ExecStart=/usr/sbin/ip6tables -t nat -A POSTROUTING -s fdff::/16 ! -o docker0 -j MASQUERADE
+ExecStop=/usr/sbin/ip6tables -t nat -D POSTROUTING -s fdff::/16 ! -o docker0 -j MASQUERADE
 RemainAfterExit=yes
 
 [Install]
