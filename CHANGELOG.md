@@ -1,3 +1,10 @@
+# [0.9.0](https://github.com/bauer-group/DC-Coolify/compare/v0.8.12...v0.9.0) (2025-12-22)
+
+
+### Features
+
+* add configurable PUSHER_HOST and PUSHER_PORT for improved setup flexibility ([8b691c5](https://github.com/bauer-group/DC-Coolify/commit/8b691c59b9a65c81014f499b9be828e2d4285d03))
+
 ## [0.8.12](https://github.com/bauer-group/DC-Coolify/compare/v0.8.11...v0.8.12) (2025-12-22)
 
 
