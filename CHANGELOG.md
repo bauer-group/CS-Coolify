@@ -1,3 +1,11 @@
+## [0.10.1](https://github.com/bauer-group/DC-Coolify/compare/v0.10.0...v0.10.1) (2025-12-22)
+
+
+### Bug Fixes
+
+* update SOCKETI_VERSION to latest in docker-compose and setup script for consistency ([217882e](https://github.com/bauer-group/DC-Coolify/commit/217882ecc3944656bf0d1c4b45f6f8a9f3dedcaf))
+* update TIMEZONE to UTC in configuration files for consistency ([1c48382](https://github.com/bauer-group/DC-Coolify/commit/1c483825f80d722f9975c0c76f19b593b446c000))
+
 # [0.10.0](https://github.com/bauer-group/DC-Coolify/compare/v0.9.0...v0.10.0) (2025-12-22)
 
 
