@@ -1,3 +1,10 @@
+## [0.8.10](https://github.com/bauer-group/DC-Coolify/compare/v0.8.9...v0.8.10) (2025-12-22)
+
+
+### Bug Fixes
+
+* rename soketi-server to coolify-realtime and update port exposure in docker-compose.yml ([d30ec10](https://github.com/bauer-group/DC-Coolify/commit/d30ec10662820f41ba300b35b664ccdd572362b4))
+
 ## [0.8.9](https://github.com/bauer-group/DC-Coolify/compare/v0.8.8...v0.8.9) (2025-12-22)
 
 
