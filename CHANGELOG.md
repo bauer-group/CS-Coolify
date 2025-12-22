@@ -1,3 +1,10 @@
+## [0.8.9](https://github.com/bauer-group/DC-Coolify/compare/v0.8.8...v0.8.9) (2025-12-22)
+
+
+### Bug Fixes
+
+* standardize network name to lowercase in docker-compose.yml ([b5ab303](https://github.com/bauer-group/DC-Coolify/commit/b5ab3035c966391b6b02ba9097fa64b0a4131fa3))
+
 ## [0.8.8](https://github.com/bauer-group/DC-Coolify/compare/v0.8.7...v0.8.8) (2025-12-22)
 
 
