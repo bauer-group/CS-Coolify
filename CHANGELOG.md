@@ -1,3 +1,10 @@
+## [0.10.4](https://github.com/bauer-group/DC-Coolify/compare/v0.10.3...v0.10.4) (2025-12-24)
+
+
+### Bug Fixes
+
+* enhance Docker and cloud-init configurations with log rotation and unattended upgrades ([c336c0d](https://github.com/bauer-group/DC-Coolify/commit/c336c0d6d2c10018eaa890c960148cd5edd17e16))
+
 ## [0.10.3](https://github.com/bauer-group/DC-Coolify/compare/v0.10.2...v0.10.3) (2025-12-24)
 
 
