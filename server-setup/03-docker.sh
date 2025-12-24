@@ -70,7 +70,7 @@ EOF
 
 sysctl -p /etc/sysctl.d/98-docker.conf >/dev/null 2>&1 || true
 
-# Docker daemon configuration with IPv6 support
+# Docker daemon configuration with IPv6 support and log rotation
 # Network ranges (full 10.0.0.0/8 split in half):
 #   - docker0 bridge:    10.0.0.0/9   (10.0-127.x.x),   fdff::/17 (IPv6)
 #   - container pools:   10.128.0.0/9 (10.128-255.x.x), fdff:8000::/17 -> /64 per network (IPv6)
@@ -89,7 +89,12 @@ cat > /etc/docker/daemon.json << 'EOF'
       "base": "fdff:8000::/17",
       "size": 64
     }
-  ]
+  ],
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  }
 }
 EOF
 
