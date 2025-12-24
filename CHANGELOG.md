@@ -1,3 +1,10 @@
+# [0.11.0](https://github.com/bauer-group/DC-Coolify/compare/v0.10.4...v0.11.0) (2025-12-24)
+
+
+### Features
+
+* configure unattended upgrades for automatic security updates ([12122da](https://github.com/bauer-group/DC-Coolify/commit/12122dab57b49fbcd6484ae70f0acc956b00bf95))
+
 ## [0.10.4](https://github.com/bauer-group/DC-Coolify/compare/v0.10.3...v0.10.4) (2025-12-24)
 
 
