@@ -65,17 +65,50 @@ apt-get install -y -qq \
 print_success "Packages installed"
 
 #######################################
-# 3. Disable Unattended Upgrades
+# 3. Configure Unattended Upgrades
 #######################################
-echo "[3/8] Disabling Unattended Upgrades..."
+echo "[3/8] Configuring Unattended Upgrades..."
 
-if dpkg -l | grep -q unattended-upgrades; then
-    echo 'APT::Periodic::Unattended-Upgrade "0";' > /etc/apt/apt.conf.d/20auto-upgrades-disabled
-    systemctl disable unattended-upgrades 2>/dev/null || true
-    systemctl stop unattended-upgrades 2>/dev/null || true
-    print_success "Unattended upgrades disabled"
+if [ "${UNATTENDED_UPGRADES:-true}" = "true" ]; then
+    # Enable automatic security updates
+    apt-get install -y unattended-upgrades update-notifier-common >/dev/null 2>&1 || true
+
+    cat > /etc/apt/apt.conf.d/50unattended-upgrades << 'EOF'
+Unattended-Upgrade::Allowed-Origins {
+    "${distro_id}:${distro_codename}";
+    "${distro_id}:${distro_codename}-security";
+    "${distro_id}ESMApps:${distro_codename}-apps-security";
+    "${distro_id}ESM:${distro_codename}-infra-security";
+};
+Unattended-Upgrade::Package-Blacklist {
+};
+Unattended-Upgrade::AutoFixInterruptedDpkg "true";
+Unattended-Upgrade::MinimalSteps "true";
+Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
+Unattended-Upgrade::Automatic-Reboot "false";
+EOF
+
+    cat > /etc/apt/apt.conf.d/20auto-upgrades << 'EOF'
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+APT::Periodic::Download-Upgradeable-Packages "1";
+APT::Periodic::AutocleanInterval "7";
+EOF
+
+    systemctl enable unattended-upgrades 2>/dev/null || true
+    systemctl start unattended-upgrades 2>/dev/null || true
+    print_success "Unattended upgrades enabled (security updates)"
 else
-    print_success "Unattended upgrades not installed"
+    # Disable automatic updates
+    if dpkg -l | grep -q unattended-upgrades; then
+        echo 'APT::Periodic::Unattended-Upgrade "0";' > /etc/apt/apt.conf.d/20auto-upgrades
+        systemctl disable unattended-upgrades 2>/dev/null || true
+        systemctl stop unattended-upgrades 2>/dev/null || true
+        print_success "Unattended upgrades disabled"
+    else
+        print_success "Unattended upgrades not installed"
+    fi
 fi
 
 #######################################

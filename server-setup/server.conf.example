@@ -17,6 +17,12 @@ NTP_SERVERS="time.bauer-group.com 0.de.pool.ntp.org 1.de.pool.ntp.org 2.de.pool.
 NTP_FALLBACK="ptbtime1.ptb.de ptbtime2.ptb.de ptbtime3.ptb.de"
 
 #######################################
+# Security Updates
+# Set to "false" to disable automatic security updates
+#######################################
+#UNATTENDED_UPGRADES="true"
+
+#######################################
 # Network Configuration
 # Leave empty to skip network setup (use DHCP)
 #######################################

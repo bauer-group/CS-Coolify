@@ -27,6 +27,12 @@ NTP_SERVERS="${NTP_SERVERS:-time.bauer-group.com 0.de.pool.ntp.org 1.de.pool.ntp
 NTP_FALLBACK="${NTP_FALLBACK:-ptbtime1.ptb.de ptbtime2.ptb.de ptbtime3.ptb.de}"
 
 #######################################
+# Security Updates
+#######################################
+# Enable automatic security updates (true/false)
+UNATTENDED_UPGRADES="${UNATTENDED_UPGRADES:-true}"
+
+#######################################
 # Network Configuration
 #######################################
 NETWORK_MAC="${NETWORK_MAC:-}"
@@ -45,6 +51,7 @@ NETWORK_IPV6_GATEWAY="${NETWORK_IPV6_GATEWAY:-fe80::1}"
 #######################################
 export HOSTNAME LOCALE TIMEZONE
 export NTP_SERVERS NTP_FALLBACK
+export UNATTENDED_UPGRADES
 export NETWORK_MAC
 export NETWORK_IPV4 NETWORK_IPV4_NETMASK NETWORK_IPV4_GATEWAY
 export NETWORK_IPV6 NETWORK_IPV6_GATEWAY
