@@ -21,17 +21,15 @@ timezone: UTC
 
 #######################################
 # Users
-# Passwords are generated dynamically via runcmd
+# deploy: System user for Coolify (no login)
+# root: Admin access via SSH with generated password
 #######################################
 users:
   - name: deploy
     groups: [sudo, docker]
-    shell: /bin/bash
-    sudo: ALL=(ALL) NOPASSWD:ALL
-    lock_passwd: false
-    # Optional: Add your SSH public key
-    # ssh_authorized_keys:
-    #   - ssh-ed25519 AAAAC3... user@host
+    shell: /usr/sbin/nologin
+    lock_passwd: true
+    system: true
   - name: root
     lock_passwd: false
     # Optional: Add your SSH public key
@@ -193,34 +191,35 @@ write_files:
 # Run Commands
 #######################################
 runcmd:
-  # Generate random passwords for deploy and root users
+  # Generate random password for root user
   - |
-    DEPLOY_PASS=$(openssl rand -base64 16 | tr -dc 'a-zA-Z0-9' | head -c 16)
     ROOT_PASS=$(openssl rand -base64 16 | tr -dc 'a-zA-Z0-9' | head -c 16)
-    echo "deploy:${DEPLOY_PASS}" | chpasswd
     echo "root:${ROOT_PASS}" | chpasswd
     echo "========================================"
-    echo " GENERATED CREDENTIALS"
+    echo " ROOT PASSWORD"
     echo "========================================"
-    echo " deploy: ${DEPLOY_PASS}"
-    echo " root:   ${ROOT_PASS}"
+    echo " root: ${ROOT_PASS}"
     echo "========================================"
     echo ""
-    echo "SAVE THESE PASSWORDS NOW!"
-    echo "They will only be shown once in /var/log/cloud-init-output.log"
+    echo "SAVE THIS PASSWORD NOW!"
+    echo "It will only be shown once in /var/log/cloud-init-output.log"
     echo ""
     # Also save to a temporary file (delete after first login!)
     cat > /root/CREDENTIALS.txt << EOF
     ========================================
-     GENERATED CREDENTIALS
+     ROOT PASSWORD
     ========================================
-     deploy: ${DEPLOY_PASS}
-     root:   ${ROOT_PASS}
+     root: ${ROOT_PASS}
     ========================================
-     DELETE THIS FILE AFTER SAVING PASSWORDS!
+     DELETE THIS FILE AFTER SAVING PASSWORD!
      rm /root/CREDENTIALS.txt
     EOF
     chmod 600 /root/CREDENTIALS.txt
+
+  # Enable SSH root login with password
+  - sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+  - sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+  - systemctl restart sshd
 
   # Create bootstrap directory
   - mkdir -p /opt/coolify-bootstrap
