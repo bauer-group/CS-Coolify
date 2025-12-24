@@ -1,3 +1,12 @@
+## [0.10.2](https://github.com/bauer-group/DC-Coolify/compare/v0.10.1...v0.10.2) (2025-12-24)
+
+
+### Bug Fixes
+
+* standardize description casing and refactor job definitions in release workflow ([57fd1bb](https://github.com/bauer-group/DC-Coolify/commit/57fd1bb8f9196d95a0e0fe25db923c5fee121260))
+* update hostname to include domain in cloud-init configuration ([58da837](https://github.com/bauer-group/DC-Coolify/commit/58da837670bfd211f7fb17aafa77612cf1233dc1))
+* update timezone to UTC and refine Git repository configuration in cloud-init ([f3d6d5a](https://github.com/bauer-group/DC-Coolify/commit/f3d6d5ac9966094dda9487cc5570f60134a9fb5e))
+
 ## [0.10.1](https://github.com/bauer-group/DC-Coolify/compare/v0.10.0...v0.10.1) (2025-12-22)
 
 
