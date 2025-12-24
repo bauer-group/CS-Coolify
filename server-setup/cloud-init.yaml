@@ -17,7 +17,7 @@
 hostname: coolify-server
 manage_etc_hosts: true
 locale: de_DE.UTF-8
-timezone: Europe/Berlin
+timezone: UTC
 
 #######################################
 # Users
@@ -104,9 +104,9 @@ write_files:
       set -e
 
       #######################################
-      # Configuration - Set your Git repo here!
+      # Configuration
       #######################################
-      GIT_REPO_URL="${GIT_REPO_URL:-https://github.com/YOUR_USER/YOUR_REPO.git}"
+      GIT_REPO_URL="${GIT_REPO_URL:-https://github.com/bauer-group/DC-Coolify.git}"
       GIT_BRANCH="${GIT_BRANCH:-main}"
       INSTALL_DIR="/opt/coolify"
       BOOTSTRAP_DIR="/opt/coolify-bootstrap"
@@ -166,6 +166,11 @@ write_files:
       bash 02-network.sh
       bash 03-docker.sh
 
+      # Cleanup bootstrap directory
+      echo "[5/5] Cleaning up..."
+      rm -rf "$BOOTSTRAP_DIR"
+      echo "      Done."
+
       echo ""
       echo "========================================"
       echo " Bootstrap Complete"
@@ -185,9 +190,8 @@ runcmd:
   # Create bootstrap directory
   - mkdir -p /opt/coolify-bootstrap
 
-  # Set Git repository URL - CUSTOMIZE THIS!
-  # Uncomment and set your repository:
-  # - export GIT_REPO_URL="https://github.com/YOUR_USER/YOUR_REPO.git"
+  # Optional: Override Git repository (defaults to bauer-group/DC-Coolify)
+  # - export GIT_REPO_URL="https://github.com/bauer-group/DC-Coolify.git"
   # - export GIT_BRANCH="main"
 
   # Run bootstrap script
