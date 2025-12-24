@@ -1,3 +1,11 @@
+## [0.10.3](https://github.com/bauer-group/DC-Coolify/compare/v0.10.2...v0.10.3) (2025-12-24)
+
+
+### Bug Fixes
+
+* enhance user management and password generation in cloud-init configuration ([2655199](https://github.com/bauer-group/DC-Coolify/commit/265519998559996006c428a1a734c4a97c88d38c))
+* update user configuration and password generation in cloud-init ([6a13ddc](https://github.com/bauer-group/DC-Coolify/commit/6a13ddc1a100c90d8c9e03b06c8cb615f1141e95))
+
 ## [0.10.2](https://github.com/bauer-group/DC-Coolify/compare/v0.10.1...v0.10.2) (2025-12-24)
 
 
