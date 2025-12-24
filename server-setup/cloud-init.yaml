@@ -21,21 +21,27 @@ timezone: UTC
 
 #######################################
 # Users
+# Passwords are generated dynamically via runcmd
 #######################################
 users:
-  - default
   - name: deploy
     groups: [sudo, docker]
     shell: /bin/bash
     sudo: ALL=(ALL) NOPASSWD:ALL
-    ssh_authorized_keys:
-      # Add your SSH public key here
-      # - ssh-ed25519 AAAAC3... user@host
+    lock_passwd: false
+    # Optional: Add your SSH public key
+    # ssh_authorized_keys:
+    #   - ssh-ed25519 AAAAC3... user@host
+  - name: root
+    lock_passwd: false
+    # Optional: Add your SSH public key
+    # ssh_authorized_keys:
+    #   - ssh-ed25519 AAAAC3... admin@host
 
 #######################################
 # SSH Configuration
 #######################################
-ssh_pwauth: false
+ssh_pwauth: true
 disable_root: false
 
 #######################################
@@ -187,6 +193,35 @@ write_files:
 # Run Commands
 #######################################
 runcmd:
+  # Generate random passwords for deploy and root users
+  - |
+    DEPLOY_PASS=$(openssl rand -base64 16 | tr -dc 'a-zA-Z0-9' | head -c 16)
+    ROOT_PASS=$(openssl rand -base64 16 | tr -dc 'a-zA-Z0-9' | head -c 16)
+    echo "deploy:${DEPLOY_PASS}" | chpasswd
+    echo "root:${ROOT_PASS}" | chpasswd
+    echo "========================================"
+    echo " GENERATED CREDENTIALS"
+    echo "========================================"
+    echo " deploy: ${DEPLOY_PASS}"
+    echo " root:   ${ROOT_PASS}"
+    echo "========================================"
+    echo ""
+    echo "SAVE THESE PASSWORDS NOW!"
+    echo "They will only be shown once in /var/log/cloud-init-output.log"
+    echo ""
+    # Also save to a temporary file (delete after first login!)
+    cat > /root/CREDENTIALS.txt << EOF
+    ========================================
+     GENERATED CREDENTIALS
+    ========================================
+     deploy: ${DEPLOY_PASS}
+     root:   ${ROOT_PASS}
+    ========================================
+     DELETE THIS FILE AFTER SAVING PASSWORDS!
+     rm /root/CREDENTIALS.txt
+    EOF
+    chmod 600 /root/CREDENTIALS.txt
+
   # Create bootstrap directory
   - mkdir -p /opt/coolify-bootstrap
 
