@@ -6,14 +6,14 @@ set -e
 #
 # Usage:
 #   Full install (server setup + Coolify):
-#     curl -fsSL https://raw.githubusercontent.com/bauer-group/DC-Coolify/main/install.sh | sudo bash
+#     curl -fsSL https://raw.githubusercontent.com/bauer-group/CS-Coolify/main/install.sh | sudo bash
 #
 #   Coolify only (existing Docker host):
-#     curl -fsSL https://raw.githubusercontent.com/bauer-group/DC-Coolify/main/install.sh | sudo bash -s -- --coolify-only
+#     curl -fsSL https://raw.githubusercontent.com/bauer-group/CS-Coolify/main/install.sh | sudo bash -s -- --coolify-only
 #
 #######################################
 
-REPO_URL="https://github.com/bauer-group/DC-Coolify.git"
+REPO_URL="https://github.com/bauer-group/CS-Coolify.git"
 INSTALL_DIR="/opt/coolify"
 BRANCH="main"
 

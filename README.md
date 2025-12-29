@@ -38,20 +38,20 @@ A production-ready, self-hosted deployment of [Coolify](https://coolify.io) with
 
 ```bash
 # Interactive mode - asks what to install
-curl -fsSL https://raw.githubusercontent.com/bauer-group/DC-Coolify/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/bauer-group/CS-Coolify/main/install.sh | sudo bash
 
 # Full installation (server setup + Docker + Coolify)
-curl -fsSL https://raw.githubusercontent.com/bauer-group/DC-Coolify/main/install.sh | sudo bash -s -- --full
+curl -fsSL https://raw.githubusercontent.com/bauer-group/CS-Coolify/main/install.sh | sudo bash -s -- --full
 
 # Coolify only (existing Docker host)
-curl -fsSL https://raw.githubusercontent.com/bauer-group/DC-Coolify/main/install.sh | sudo bash -s -- --coolify-only
+curl -fsSL https://raw.githubusercontent.com/bauer-group/CS-Coolify/main/install.sh | sudo bash -s -- --coolify-only
 ```
 
 ### Option A: Fresh Ubuntu 24.04 Server (Manual)
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/bauer-group/DC-Coolify.git /opt/coolify
+git clone https://github.com/bauer-group/CS-Coolify.git /opt/coolify
 cd /opt/coolify && chmod +x *.sh server-setup/*.sh
 
 # 2. Run interactive server setup (installs Docker, configures system)
@@ -80,7 +80,7 @@ Use `server-setup/cloud-init.yaml` when provisioning a new VPS:
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/bauer-group/DC-Coolify.git /opt/coolify
+git clone https://github.com/bauer-group/CS-Coolify.git /opt/coolify
 cd /opt/coolify && chmod +x *.sh
 
 # 2. Run setup (creates folders, SSH keys, .env)

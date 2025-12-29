@@ -8,7 +8,7 @@ set -e
 #######################################
 
 INSTALL_DIR="/opt/coolify"
-REPO_URL="https://github.com/bauer-group/DC-Coolify.git"
+REPO_URL="https://github.com/bauer-group/CS-Coolify.git"
 
 #######################################
 # Colors and Output

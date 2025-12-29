@@ -128,7 +128,7 @@ write_files:
       #######################################
       # Configuration
       #######################################
-      GIT_REPO_URL="${GIT_REPO_URL:-https://github.com/bauer-group/DC-Coolify.git}"
+      GIT_REPO_URL="${GIT_REPO_URL:-https://github.com/bauer-group/CS-Coolify.git}"
       GIT_BRANCH="${GIT_BRANCH:-main}"
       INSTALL_DIR="/opt/coolify"
       BOOTSTRAP_DIR="/opt/coolify-bootstrap"
@@ -242,8 +242,8 @@ runcmd:
   # Create bootstrap directory
   - mkdir -p /opt/coolify-bootstrap
 
-  # Optional: Override Git repository (defaults to bauer-group/DC-Coolify)
-  # - export GIT_REPO_URL="https://github.com/bauer-group/DC-Coolify.git"
+  # Optional: Override Git repository (defaults to bauer-group/CS-Coolify)
+  # - export GIT_REPO_URL="https://github.com/bauer-group/CS-Coolify.git"
   # - export GIT_BRANCH="main"
 
   # Run bootstrap script
