@@ -106,6 +106,7 @@ sudo ./coolify.sh start
 ├── docker-compose.yml       # Stack definition
 ├── setup.sh                 # Coolify setup script
 ├── coolify.sh               # Management script
+├── migrate.sh               # Host-to-host migration script
 ├── README.md                # This file
 ├── .env                     # Environment configuration (generated)
 └── server-setup/            # Server provisioning scripts
@@ -466,6 +467,83 @@ To update manually:
 ```bash
 sudo ./coolify.sh update
 ```
+
+## Migrating to a New Host
+
+`migrate.sh` moves a complete Coolify instance to a fresh server over SSH.
+It runs on the **source** server (push model) and orchestrates the
+destination. The source is never stopped — the migration uses an online
+backup, so it stays fully reversible: if anything fails, the old instance
+keeps running untouched.
+
+### What gets migrated
+
+| Layer | How |
+| --- | --- |
+| Control plane (PostgreSQL, Redis, SSH keys, `.env`) | Online backup via `coolify.sh backup` (logical `pg_dump`, version-safe) |
+| Deployed app volumes | Docker named volumes, interactively selected; affected containers are briefly stopped for a consistent export |
+| Repository (compose + scripts) | Streamed to `/opt/coolify` on the destination |
+
+### Prerequisites
+
+- **Source**: running Coolify stack, `docker`, an SSH **private** key that
+  authenticates to the destination as `root`.
+- **Destination**: Ubuntu host with **Docker already installed** (run
+  `server-setup/` there first if needed) and root SSH access.
+
+```bash
+# On the source: create a key and authorize it on the destination
+ssh-keygen -t ed25519 -f ~/.ssh/coolify_migration_key
+ssh-copy-id -i ~/.ssh/coolify_migration_key.pub root@<destination>
+```
+
+### Usage
+
+```bash
+# Interactive volume selection, no hostname change
+sudo ./migrate.sh --dest <destination> --key ~/.ssh/coolify_migration_key
+
+# Fully automated, all volumes, with hostname + domain change
+sudo ./migrate.sh \
+  --dest new.example.com --key ~/.ssh/coolify_migration_key \
+  --all-volumes --yes \
+  --new-hostname coolify-prod \
+  --old-domain old.example.com --new-domain new.example.com
+```
+
+| Option | Description |
+| --- | --- |
+| `--dest <host>` | Destination host or IP (root SSH) — **required** |
+| `--key <path>` | SSH private key for the destination — **required** |
+| `--all-volumes` / `--no-volumes` | Migrate all / no app volumes (default: interactive select) |
+| `--new-hostname <name>` | Set the OS hostname on the destination (`hostnamectl`) |
+| `--old-domain` / `--new-domain` | Rewrite the domain in `PUSHER_HOST` **and** in Coolify's database (instance + app FQDNs). Must be given together |
+| `--live-volumes` | Export volumes without stopping app containers (faster, risks inconsistent data) |
+| `--yes` | Assume "yes" for all prompts (full automation) |
+
+### How it works
+
+1. **Preflight** — validates SSH, source stack, destination Docker; warns if
+   the destination already has Coolify.
+2. **Backup** — runs `coolify.sh backup` (online, no downtime).
+3. **Volumes** — discovers Docker named volumes, lets you pick, stops the
+   affected app containers only for the duration of each export, then
+   restarts them.
+4. **Transfer** — streams the repo (without `.env`/`.git`) plus the backup
+   and volume archives, with a SHA-256 manifest.
+5. **Import** (on destination) — verifies checksums, runs `setup.sh`,
+   restores volumes, runs `coolify.sh restore`, re-authorizes Coolify's SSH
+   key, applies the optional hostname/domain change, starts the stack, and
+   waits for the health check.
+
+> **After migration:** the new instance is running but the **source is left
+> untouched**. Verify the destination, repoint DNS / your reverse proxy, then
+> decommission the source with `sudo ./coolify.sh stop`.
+>
+> **Domain rewrite caveat:** rewriting FQDNs in Coolify's database is a direct
+> edit of Coolify's data model. Only the `fqdn` columns of `instance_settings`,
+> `applications`, and `service_applications` are touched, inside a single
+> transaction. Verify your applications' domains in the Coolify UI afterwards.
 
 ## Security Considerations
 
