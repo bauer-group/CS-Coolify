@@ -1,3 +1,9 @@
+## [0.12.1](https://github.com/bauer-group/CS-Coolify/compare/v0.12.0...v0.12.1) (2026-06-17)
+
+### 🐛 Bug Fixes
+
+* **migrate:** hardened destination Docker check and clarified volume select ([a3df5ec](https://github.com/bauer-group/CS-Coolify/commit/a3df5ec5b6db54a9247ba163d8182051371cca34))
+
 ## [0.12.0](https://github.com/bauer-group/CS-Coolify/compare/v0.11.1...v0.12.0) (2026-06-17)
 
 ### 🚀 Features
