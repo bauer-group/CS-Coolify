@@ -357,8 +357,10 @@ do_migrate() {
     fi
 
     # 3. Integrity manifest (verified on the destination before restore).
+    # Hash only the payload archives — never the manifest itself, otherwise
+    # the glob would include the (just-created) manifest file and break -c.
     print_step "Writing checksum manifest ..."
-    ( cd "$WORK_DIR" && sha256sum ./* > manifest.sha256 )
+    ( cd "$WORK_DIR" && sha256sum -- *.tar.gz > manifest.sha256 )
     print_success "Manifest written"
 
     # 4. Transfer: repo (without secrets), then the staging payload.
