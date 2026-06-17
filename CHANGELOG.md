@@ -1,3 +1,9 @@
+## [0.12.0](https://github.com/bauer-group/CS-Coolify/compare/v0.11.1...v0.12.0) (2026-06-17)
+
+### 🚀 Features
+
+* **migrate:** added host-to-host migration script ([6a7dc51](https://github.com/bauer-group/CS-Coolify/commit/6a7dc51a77a6bc765aed67f987c5e5e952e412cd))
+
 ## [0.11.1](https://github.com/bauer-group/CS-Coolify/compare/v0.11.0...v0.11.1) (2025-12-29)
 
 
