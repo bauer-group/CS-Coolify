@@ -500,6 +500,9 @@ ssh-copy-id -i ~/.ssh/coolify_migration_key.pub root@<destination>
 ### Usage
 
 ```bash
+# Recommended first: dry run — shows the full plan, changes nothing
+sudo ./migrate.sh --dest <destination> --key ~/.ssh/coolify_migration_key --dry-run
+
 # Interactive volume selection, no hostname change
 sudo ./migrate.sh --dest <destination> --key ~/.ssh/coolify_migration_key
 
@@ -515,6 +518,7 @@ sudo ./migrate.sh \
 | --- | --- |
 | `--dest <host>` | Destination host or IP (root SSH) — **required** |
 | `--key <path>` | SSH private key for the destination — **required** |
+| `--dry-run` | Show the full plan and run read-only preflight checks; make no changes |
 | `--all-volumes` / `--no-volumes` | Migrate all / no app volumes (default: interactive select) |
 | `--new-hostname <name>` | Set the OS hostname on the destination (`hostnamectl`) |
 | `--old-domain` / `--new-domain` | Rewrite the domain in `PUSHER_HOST` **and** in Coolify's database (instance + app FQDNs). Must be given together |

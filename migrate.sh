@@ -96,6 +96,8 @@ Hostname / domain change (optional):
                          --old-domain and --new-domain must be given together
 
 Behavior:
+  --dry-run              Show the full migration plan and run the read-only
+                         preflight checks, but make NO changes anywhere
   --yes                  Assume "yes" for all prompts (full automation)
   --live-volumes         Export volumes WITHOUT stopping app containers
                          (faster, but risks inconsistent stateful data)
@@ -117,6 +119,7 @@ NEW_DOMAIN=""
 VOLUME_MODE="select"        # select | all | none
 ASSUME_YES=false
 STOP_FOR_VOLUMES=true
+DRY_RUN=false
 
 parse_args() {
     while [ $# -gt 0 ]; do
@@ -129,6 +132,7 @@ parse_args() {
             --all-volumes) VOLUME_MODE="all"; shift ;;
             --no-volumes) VOLUME_MODE="none"; shift ;;
             --live-volumes) STOP_FOR_VOLUMES=false; shift ;;
+            --dry-run) DRY_RUN=true; shift ;;
             --yes|-y) ASSUME_YES=true; shift ;;
             -h|--help) usage; exit 0 ;;
             *) die "Unknown option: $1 (use --help)" ;;
@@ -207,8 +211,10 @@ preflight() {
     # Warn loudly if the destination already hosts a Coolify install.
     if ssh_dest "test -f /opt/coolify/.env" 2>/dev/null; then
         print_warning "Destination already has /opt/coolify/.env — it WILL be overwritten."
-        confirm "Continue and overwrite the destination Coolify?" "n" \
-            || die "Aborted by user."
+        if [ "$DRY_RUN" != "true" ]; then
+            confirm "Continue and overwrite the destination Coolify?" "n" \
+                || die "Aborted by user."
+        fi
     fi
 }
 
@@ -323,19 +329,71 @@ export_volumes() {
     done
 }
 
+# Print the migration plan (shown in --dry-run and before the real run).
+print_plan() {
+    local -n _pv=$1
+    print_header "Migration plan"
+    echo "Source:        $(hostname) ($(hostname -I 2>/dev/null | awk '{print $1}'))"
+    echo "Destination:   root@${DEST}  (key: $SSH_KEY)"
+    echo ""
+    echo "Control plane: online backup via ./coolify.sh backup"
+    echo "               (PostgreSQL dump + Redis snapshot + SSH keys + .env)"
+    echo ""
+    if [ "${#_pv[@]}" -gt 0 ]; then
+        echo "App volumes to migrate (${#_pv[@]}):"
+        local v size
+        for v in "${_pv[@]}"; do
+            size=$(du -sh "/var/lib/docker/volumes/$v/_data" 2>/dev/null | cut -f1 || echo '?')
+            printf '  - %-50s %8s\n' "$v" "$size"
+        done
+        if [ "$STOP_FOR_VOLUMES" = "true" ]; then
+            echo "  (affected app containers briefly stopped per volume for consistency)"
+        else
+            echo "  (live export — app containers NOT stopped; --live-volumes)"
+        fi
+    else
+        echo "App volumes:   none (control plane only)"
+    fi
+    echo ""
+    if [ -n "$NEW_HOSTNAME" ] || [ -n "$NEW_DOMAIN" ]; then
+        echo "Hostname / domain changes (destination):"
+        [ -n "$NEW_HOSTNAME" ] && echo "  OS hostname     -> $NEW_HOSTNAME"
+        [ -n "$NEW_DOMAIN" ]   && echo "  PUSHER_HOST     -> $NEW_DOMAIN"
+        [ -n "$NEW_DOMAIN" ]   && echo "  Coolify DB fqdn -> $OLD_DOMAIN => $NEW_DOMAIN"
+    else
+        echo "Hostname / domain: unchanged"
+    fi
+    echo ""
+    echo "Destination sequence:"
+    echo "  transfer repo -> setup.sh -> restore volumes -> coolify.sh restore"
+    echo "  -> re-authorize Coolify SSH key -> hostname/domain -> start -> health"
+}
+
 do_migrate() {
     check_root
     trap cleanup_on_error EXIT
 
     print_header "Coolify Host Migration"
-    echo "Source:      $(hostname) ($(hostname -I 2>/dev/null | awk '{print $1}'))"
-    echo "Destination: $DEST"
-    [ -n "$NEW_HOSTNAME" ] && echo "New hostname: $NEW_HOSTNAME"
-    [ -n "$NEW_DOMAIN" ]   && echo "Domain:       $OLD_DOMAIN -> $NEW_DOMAIN"
+    [ "$DRY_RUN" = "true" ] && print_warning "DRY RUN — no changes will be made."
     echo ""
 
     preflight
 
+    # Decide what to migrate (read-only), then show the plan.
+    local vols=()
+    mapfile -t vols < <(select_volumes)
+    print_plan vols
+
+    if [ "$DRY_RUN" = "true" ]; then
+        echo ""
+        print_warning "DRY RUN complete — preflight passed, plan shown above."
+        print_warning "No backup, transfer, or destination changes were made."
+        echo "Re-run without --dry-run to perform the migration."
+        trap - EXIT
+        exit 0
+    fi
+
+    echo ""
     confirm "Proceed with the migration?" "y" || die "Aborted by user."
 
     # Staging work dir on the source.
@@ -347,9 +405,7 @@ do_migrate() {
     backup_file=$(create_backup)
     cp "$backup_file" "$WORK_DIR/"
 
-    # 2. Volume selection + export.
-    local vols=()
-    mapfile -t vols < <(select_volumes)
+    # 2. Export the selected volumes.
     if [ "${#vols[@]}" -gt 0 ]; then
         export_volumes vols
     else
