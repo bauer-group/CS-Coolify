@@ -235,6 +235,44 @@ When using HTTPS, Traefik automatically routes:
 - `/app` → `coolify-realtime:6001` (realtime)
 - `/terminal/ws` → `coolify-realtime:6002` (terminal)
 
+### Changing the Hostname
+
+There are **three independent "hostnames"** in this stack. Changing one does
+*not* change the others — pick the layer you actually mean:
+
+| Layer | What it is | Where to change it |
+| --- | --- | --- |
+| OS hostname | The server's machine name (`hostname` command, shell prompt, logs) | `hostnamectl` on the host |
+| `PUSHER_HOST` | Realtime/WebSocket host the **browser** must reach | `/opt/coolify/.env` |
+| Instance domain | The FQDN Coolify is served on (reverse proxy + SSL) | Coolify UI → Settings |
+
+**1. OS hostname** (machine name):
+
+```bash
+sudo hostnamectl set-hostname new-name
+# Also update /etc/hosts if it pins the old name
+```
+
+> `HOSTNAME` in `server-setup/server.conf` is applied **only during the initial
+> server setup** (`hostnamectl set-hostname` in `server-setup/install.sh`).
+> Editing it later has no effect on a running system — use `hostnamectl`.
+
+**2. `PUSHER_HOST`** (realtime host reachable from the browser):
+
+```bash
+sudo nano /opt/coolify/.env     # set e.g. PUSHER_HOST=coolify.example.com
+sudo ./coolify.sh start         # NOT 'restart' — see note below
+```
+
+> **Important:** Use `start` (`docker compose up -d`), **not** `restart`.
+> `restart` reuses the existing container definition and will *not* pick up
+> `.env` changes. `start` compares the config and recreates the container when
+> values changed. The same applies to any other `.env` edit.
+
+**3. Instance domain** (the FQDN with SSL): set this in the Coolify dashboard
+under **Settings → Instance Domain (FQDN)**. It is stored in Coolify's own
+database, not in `.env`, so the setup scripts intentionally leave it unset.
+
 ### Auto-Updates
 
 Watchtower automatically updates containers weekly:
