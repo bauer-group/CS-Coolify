@@ -1,3 +1,9 @@
+## [0.13.0](https://github.com/bauer-group/CS-Coolify/compare/v0.12.2...v0.13.0) (2026-06-17)
+
+### 🚀 Features
+
+* **migrate:** added --dry-run mode ([6925f53](https://github.com/bauer-group/CS-Coolify/commit/6925f530151ac78aac8efe28d997f9db5b83edc1))
+
 ## [0.12.2](https://github.com/bauer-group/CS-Coolify/compare/v0.12.1...v0.12.2) (2026-06-17)
 
 ### 🐛 Bug Fixes
