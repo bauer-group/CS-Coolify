@@ -523,8 +523,9 @@ sudo ./migrate.sh \
 
 ### How it works
 
-1. **Preflight** — validates SSH, source stack, destination Docker; warns if
-   the destination already has Coolify.
+1. **Preflight** — validates SSH, source stack, and that Docker is installed
+   **and running** on the destination (fails early with a hint otherwise);
+   warns if the destination already has Coolify.
 2. **Backup** — runs `coolify.sh backup` (online, no downtime).
 3. **Volumes** — discovers Docker named volumes, lets you pick, stops the
    affected app containers only for the duration of each export, then

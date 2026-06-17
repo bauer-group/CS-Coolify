@@ -187,10 +187,22 @@ preflight() {
     ssh_dest "exit" 2>/dev/null || die "SSH connection to $DEST failed."
     print_success "SSH connection OK"
 
-    # Destination must already have Docker (we do not provision the OS here).
-    ssh_dest "command -v docker >/dev/null 2>&1" \
-        || die "Docker is not installed on the destination. Run server-setup there first."
-    print_success "Docker present on destination"
+    # Destination must already have a WORKING Docker (we do not provision the
+    # OS here). Distinguish "not installed" from "installed but daemon down".
+    print_step "Checking Docker on destination ..."
+    if ! ssh_dest "command -v docker >/dev/null 2>&1"; then
+        print_error "Docker is not installed on the destination ($DEST)."
+        echo "  Provision the destination first, e.g.:"
+        echo "    cd /opt/coolify/server-setup && sudo ./install.sh"
+        echo "  (or install Docker manually), then re-run this migration."
+        exit 1
+    fi
+    if ! ssh_dest "docker info >/dev/null 2>&1"; then
+        print_error "Docker is installed but the daemon is not running on $DEST."
+        echo "  Start it on the destination:  sudo systemctl enable --now docker"
+        exit 1
+    fi
+    print_success "Docker installed and running on destination"
 
     # Warn loudly if the destination already hosts a Coolify install.
     if ssh_dest "test -f /opt/coolify/.env" 2>/dev/null; then
@@ -236,7 +248,10 @@ select_volumes() {
         i=$((i + 1))
     done
     echo "" >&2
-    echo "Enter numbers (space-separated), 'all', or 'none':" >&2
+    echo "Select volumes to migrate:" >&2
+    echo "  all   - migrate every volume listed above" >&2
+    echo "  none  - skip app volumes (migrate control plane only)" >&2
+    echo "  1 3 4 - migrate specific volumes by number (space-separated)" >&2
     local reply
     read -r -p "> " reply </dev/tty || reply="none"
 
