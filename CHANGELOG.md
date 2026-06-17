@@ -1,3 +1,9 @@
+## [0.12.2](https://github.com/bauer-group/CS-Coolify/compare/v0.12.1...v0.12.2) (2026-06-17)
+
+### 🐛 Bug Fixes
+
+* **migrate:** hardened checksum manifest generation ([e050701](https://github.com/bauer-group/CS-Coolify/commit/e050701f755ebdbc1f9b789995a838bfc68a8091))
+
 ## [0.12.1](https://github.com/bauer-group/CS-Coolify/compare/v0.12.0...v0.12.1) (2026-06-17)
 
 ### 🐛 Bug Fixes
