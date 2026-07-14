@@ -199,7 +199,7 @@ networks:
     # 100.65.0.0/16 sits OUTSIDE the Docker daemon address-pool (10.128.0.0/9,
     # see server-setup/03-docker.sh) -> it never collides with the auto-created
     # per-resource networks, and it needs no daemon.json change.
-    # NOTE: 100.65.0.0/16 is still inside Tailscale's 100.64.0.0/10 range, so
+    # NOTE: 100.65.0.0/16 is inside Tailscale's 100.64.0.0/10 range, so
     # this is conflict-free only on hosts that do not run Tailscale in that
     # block. Changing this subnet on a LIVE host is NOT hot-swappable -- see
     # "Container Network Subnet" in README.md.
