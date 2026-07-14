@@ -10,8 +10,9 @@ Coolify itself is unaffected — the control-plane stack in the repo root
 lives under `/data/coolify/proxy/`.
 
 > **You do not need this.** Coolify's stock proxy works fine. Use this only when
-> you want the extra hardening (tuned timeouts, container capability drop, log
-> rotation, a reusable middleware + TLS-options toolbox for your apps).
+> you want the extra hardening: tuned timeouts, container capability drop, log
+> rotation, and sensible security defaults (compression, HSTS, security headers,
+> a global TLS policy) applied to **every** app automatically.
 
 ---
 
@@ -29,12 +30,13 @@ So the hardening splits into two durability classes:
 
 | Class | What | Survives a full regen? |
 | --- | --- | --- |
-| **DURABLE** | Everything in [`dynamic/`](dynamic/) (TLS options + middlewares) and the added `command:` flags (respondingTimeouts) | ✅ Yes |
+| **DURABLE** | Everything in [`dynamic/bg-defaults.yml`](dynamic/bg-defaults.yml) (global middlewares + TLS policy) and the added `command:` flags (respondingTimeouts + the `bg-default@file` entrypoint wiring) | ✅ Yes |
 | **BEST-EFFORT** | Compose structure: `image` pin, dropped `8080`, `cap_drop`/`security_opt`, `oom_score_adj`, `logging`, `stop_grace_period` | ⚠️ Reverts to Coolify stock |
 
 **A best-effort revert is harmless** — you fall back to a working, unhardened
 Coolify proxy. To restore the hardening, just re-paste
-[`docker-compose.yml`](docker-compose.yml) and restart the proxy.
+[`docker-compose.yml`](docker-compose.yml) and restart the proxy. (The DURABLE
+parts keep working through a regen regardless.)
 
 The load-bearing Coolify contract is preserved **byte-for-byte**, so nothing
 about routing changes:
@@ -48,28 +50,47 @@ about routing changes:
 
 ---
 
-## What the hardening actually adds
+## What the hardening adds
+
+Coolify generates every app's Traefik labels itself, so nobody hand-adds `@file`
+middlewares — an opt-in toolbox would sit unused. Instead the defaults apply
+**globally**, to every router, with zero per-app configuration.
 
 **Durable (survives regeneration):**
 
-- **respondingTimeouts** on both entrypoints — `readTimeout=0s` / `writeTimeout=0s`
-  (unbounded body/response for large uploads, S3/MinIO multipart, SSE/streaming)
-  and `idleTimeout=300s` (keeps quiet WebSocket connections alive). Added as
-  `--entrypoints.<ep>.transport.*` command flags, which Coolify preserves.
-- A reusable **middleware toolbox** ([`dynamic/bg-middlewares.yml`](dynamic/bg-middlewares.yml)):
-  HSTS, frame/nosniff/referrer/permissions headers, CORS, rate limits (CGNAT-sized),
-  body-size caps, retry, circuit breakers, www-canonicalisation, forward-auth
-  (Authelia/Authentik), compression, and pre-composed chains
-  (`hardened-public`, `hardened-api`, `s3-streaming`, `hardened-login`).
-- Named **TLS options** ([`dynamic/bg-tls.yml`](dynamic/bg-tls.yml)):
-  `bg-modern` (TLS 1.3), `bg-intermediate` (TLS 1.2 AEAD), `bg-compat`
-  (TLS 1.1 legacy-client support).
+- **Global default middlewares** ([`dynamic/bg-defaults.yml`](dynamic/bg-defaults.yml)),
+  wired at both entrypoints so they hit every app **and** Coolify's own
+  UI/realtime routes:
+  - `bg-compress` — compression, excluding `text/event-stream` (SSE stays
+    unbuffered) and already-compressed media. WebSockets (Coolify's `/app` +
+    `/terminal/ws`) are Upgrade connections and pass through untouched.
+  - `bg-headers` — HSTS (1 year, **no** includeSubdomains, **HTTPS-only** — no
+    `forceSTSHeader`, so it is never sent on the http entrypoint and an
+    intentionally HTTP-only service is unaffected), `X-Content-Type-Options:
+    nosniff`, and fixed BAUER GROUP brand values for `Server` (`BAUER GROUP
+    Edge`) / `X-Powered-By` / `X-Solution-Provider` — these advertise us and,
+    being constant, mask the real backend software + version. Referrer-Policy
+    is intentionally left to apps/browsers (a global one would override an
+    app's own policy).
+- **Global TLS policy** — `tls.options.default` with `minVersion: TLS 1.1` and a
+  legacy-compatible cipher list (the EDGEPROXY posture — keeps old clients
+  online). Applies to every router; **override per app for stricter TLS**.
+- **respondingTimeouts** on both entrypoints — `readTimeout=0s`/`writeTimeout=0s`
+  (unbounded body/response for large uploads, S3/MinIO multipart, SSE) and
+  `idleTimeout=300s` (keeps quiet WebSocket connections alive).
+
+Deliberately **not** global (would break apps or fight Coolify): frame-deny /
+permissions-policy (break legit iframes / camera-mic), a global rate-limit (an
+entrypoint rate-limit counts per source IP across *all* apps — too coarse for
+CGNAT; do DoS at the edge), and an HTTP→HTTPS redirect (Coolify does it per app,
+and a global one would fight the ACME HTTP-01 challenge). Add those per app.
 
 **Best-effort (reverts on regeneration):**
 
 - Traefik pinned to **v3.7** (replaces Coolify's older template default)
 - **Dashboard OFF** — no `8080` publish, no dashboard router (stock exposes a
-  dead `:8080` port with `--api.insecure=false`)
+  dead `:8080` port with `--api.insecure=false`). Coolify does not need it — it
+  tracks proxy status by Docker container state, not the Traefik API.
 - `cap_drop: ALL` + only `NET_BIND_SERVICE`, `no-new-privileges`
 - `oom_score_adj: -50` (BAUER GROUP OOM hierarchy)
 - non-blocking **json-file logging** with rotation (stock sets none)
@@ -79,18 +100,20 @@ about routing changes:
 
 ## Install
 
-Two parts. Do the **dynamic config first** so the middleware/TLS references
-always resolve.
+> **Order matters — dynamic config FIRST.** The compose references
+> `bg-default@file` on both entrypoints; if that middleware isn't defined yet,
+> Traefik can't resolve it and *every* router errors (including the Coolify UI).
 
-### 1. Dynamic config (durable toolbox)
+### 1. Dynamic config (the global defaults — install first)
 
-Coolify UI → **Server → Proxy → Dynamic Configurations** → add two files:
+Coolify UI → **Server → Proxy → Dynamic Configurations** → add one file:
 
-- `bg-middlewares.yml` → paste [`dynamic/bg-middlewares.yml`](dynamic/bg-middlewares.yml)
-- `bg-tls.yml` → paste [`dynamic/bg-tls.yml`](dynamic/bg-tls.yml)
+- `bg-defaults.yml` → paste [`dynamic/bg-defaults.yml`](dynamic/bg-defaults.yml)
 
-(These land in `/data/coolify/proxy/dynamic/` and hot-reload. They never
-collide with Coolify's reserved `coolify.yaml`.)
+(Lands in `/data/coolify/proxy/dynamic/`, hot-reloads, and never collides with
+Coolify's reserved `coolify.yaml` — verified: Coolify defines no `tls` block, so
+our `tls.options.default` is authoritative, and only the `gzip` /
+`redirect-to-https` middleware names, which this file avoids.)
 
 ### 2. Proxy compose (hardened)
 
@@ -100,58 +123,59 @@ with [`docker-compose.yml`](docker-compose.yml) → **Save** → **Restart Proxy
 ### 3. Verify
 
 ```bash
-# proxy is up and healthy
+# proxy up + healthy, ports 80/443/443udp, no 8080
 docker ps --filter name=coolify-proxy
+docker port coolify-proxy
 
-# hardened flags are live (timeouts, no 8080)
-docker inspect coolify-proxy --format '{{json .Args}}' | tr ',' '\n' | grep respondingTimeouts
-docker port coolify-proxy            # should show 80, 443, 443/udp -- no 8080
+# global defaults are live: HSTS + brand header on any app response
+curl -sI https://<one-of-your-app-domains> | grep -iE 'strict-transport|x-solution-provider'
 
 # an existing app still serves + renews certs
 curl -I https://<one-of-your-app-domains>
 ```
 
-Then redeploy (or just hit) one existing app to confirm routing + TLS are
-unaffected.
+If a response is missing those headers, or apps return 404/500, the dynamic
+file probably isn't installed — re-check step 1.
 
 ---
 
-## Using the toolbox from a deployed app
+## Overriding the global defaults per app
 
-In Coolify, add custom Traefik labels to the application (Advanced → Labels, or
-the app's compose). Reference file-provider middlewares/options with `@file`:
+The defaults apply automatically. Per-app router middlewares run **after** the
+global entrypoint middlewares, so an app can layer its own on top (rate-limit,
+body-cap, frame-deny, forward-auth, …) via a Traefik label in Coolify
+(Advanced → Labels):
 
 ```yaml
-# Harden a public web app
-traefik.http.routers.<router>.middlewares=hardened-public@file
-
-# Strict TLS 1.3 for an admin surface
-traefik.http.routers.<router>.tls.options=bg-modern@file
-
-# Compose several (comma-separated), e.g. API + a body cap
-traefik.http.routers.<router>.middlewares=hardened-api@file
+traefik.http.routers.<router>.middlewares=<your-mw>@file
 ```
 
-`<router>` is the router name Coolify generates for that app (visible in the
-Traefik logs or the app's generated labels).
+For **stricter TLS on one app** (admin / payment surface), add a named option
+to `bg-defaults.yml` and point that app's router at it:
 
-### Always-on BAUER GROUP header (optional)
+```yaml
+# in bg-defaults.yml, under tls.options:
+#   bg-strict: { minVersion: VersionTLS13, sniStrict: true }
+traefik.http.routers.<router>.tls.options=bg-strict@file
+```
 
-To stamp `X-Solution-Provider: BAUER GROUP` on **every** response, uncomment
-the two `--entrypoints.*.http.middlewares=bg-provider@file` lines in
-[`docker-compose.yml`](docker-compose.yml) — **only after** `bg-middlewares.yml`
-is installed (step 1), or the unresolved reference breaks every router,
-including Coolify's own UI.
+`<router>` is the router name Coolify generates for the app (see the Traefik
+logs or the app's generated labels).
+
+> To change a default globally, edit the `bg-default` chain / `bg-headers` /
+> `tls.options.default` in `bg-defaults.yml` — but do **not** remove the file
+> while the entrypoint flags are live.
 
 ---
 
 ## Rollback to Coolify stock
 
-- **Compose:** Coolify UI → Server → Proxy → Configuration → *Reset to default*
-  (or trigger a server revalidation), then Restart Proxy.
-- **Dynamic config:** delete `bg-middlewares.yml` and `bg-tls.yml` in
-  Server → Proxy → Dynamic Configurations. Remove any `@file` references you
-  added to apps first, so no router points at a now-missing middleware.
+1. Remove the two `--entrypoints.*.http.middlewares=bg-default@file` lines from
+   the proxy compose (Server → Proxy → Configuration) → Restart Proxy — or
+   *Reset to default* / trigger a server revalidation to restore stock wholesale.
+2. **Only then** delete `bg-defaults.yml` in Server → Proxy → Dynamic
+   Configurations. Order matters: never leave the entrypoint flags pointing at a
+   deleted middleware, or every router errors.
 
 ---
 
@@ -172,6 +196,6 @@ including Coolify's own UI.
 
 ---
 
-Ported from the BAUER GROUP **CS-Traefik** (EDGEPROXY) stack. For the full
-middleware reference and app-integration examples see that repo's
+Ported from the BAUER GROUP **CS-Traefik** (EDGEPROXY) stack. For a broader
+middleware catalogue to build per-app overrides from, see that repo's
 `docs/middlewares.md`.

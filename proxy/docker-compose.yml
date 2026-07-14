@@ -202,19 +202,22 @@ services:
       - "--entrypoints.https.transport.respondingTimeouts.writeTimeout=0s"
       - "--entrypoints.https.transport.respondingTimeouts.idleTimeout=300s"
 
-      # ---- [DURABLE ADD, OPT-IN] Always-on BAUER GROUP response header -------
-      # Applies the bg-provider@file middleware (X-Solution-Provider header) to
-      # every router on each entrypoint. Prefix `--entrypoints.<ep>.http.
-      # middlewares=` is NOT template-owned -> durable.
+      # ---- [DURABLE ADD] Global default middlewares (applied to ALL routers) --
+      # Wires the bg-default chain (compression + security headers + BG brand)
+      # from ./dynamic/bg-defaults.yml onto every router of each entrypoint --
+      # every Coolify app AND Coolify's own UI/realtime routes -- with no
+      # per-app labels (Coolify generates app labels itself, so an opt-in
+      # toolbox would sit unused). Prefix `--entrypoints.<ep>.http.middlewares=`
+      # is NOT template-owned -> Coolify preserves these across regeneration,
+      # and Coolify sets no entrypoint middlewares itself, so there is no
+      # conflict.
       #
-      # DISABLED BY DEFAULT to keep this compose self-sufficient: an entrypoint
-      # middleware that references bg-provider@file HARD-REQUIRES ./dynamic/
-      # bg-middlewares.yml to be installed. If it is missing, Traefik cannot
-      # resolve the reference and EVERY router (including Coolify's own UI)
-      # errors. Enable these two lines ONLY AFTER bg-middlewares.yml is live in
-      # Server -> Proxy -> Dynamic Configurations.
-      # - "--entrypoints.http.http.middlewares=bg-provider@file"
-      # - "--entrypoints.https.http.middlewares=bg-provider@file"
+      # HARD DEPENDENCY: ./dynamic/bg-defaults.yml MUST be installed (Server ->
+      # Proxy -> Dynamic Configurations) BEFORE or together with this compose.
+      # If it is missing, Traefik cannot resolve bg-default@file and EVERY router
+      # (including the Coolify UI) errors. Install the dynamic file FIRST.
+      - "--entrypoints.http.http.middlewares=bg-default@file"
+      - "--entrypoints.https.http.middlewares=bg-default@file"
 
     labels:
       # [HARD CONSTRAINT] Coolify management markers -- how Coolify recognises

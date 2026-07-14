@@ -1,0 +1,147 @@
+# =============================================================================
+# BAUER GROUP - Traefik Global Defaults (for Coolify's file provider)
+# =============================================================================
+# Install via Coolify UI: Server -> Proxy -> Dynamic Configurations -> add a
+# file named `bg-defaults.yml`. Durable -- Coolify never touches user files in
+# the dynamic dir (it only regenerates its own reserved coolify.yaml).
+#
+# These are wired GLOBALLY at the entrypoint level in ../docker-compose.yml, so
+# they apply to EVERY router automatically -- every Coolify-deployed app plus
+# Coolify's own dashboard/realtime routes -- with NO per-app labels. That is the
+# point: Coolify generates app labels itself, so nobody hand-picks @file
+# middlewares; an opt-in toolbox would just sit unused.
+#
+# HARD PAIRING: ../docker-compose.yml references `bg-default@file` on both
+# entrypoints. If THIS file is missing, Traefik cannot resolve that reference
+# and EVERY router errors (including the Coolify UI). Always install this file
+# FIRST and never remove it while the entrypoint flags are active.
+#
+# Verified safe against Coolify's reserved coolify.yaml (source: Coolify
+# Server.php setupDynamicProxyConfiguration): it defines NO `tls` block, so our
+# tls.options.default is the only default -> no collision; and it only defines
+# the middleware names `gzip` + `redirect-to-https`, which we deliberately avoid.
+# =============================================================================
+
+http:
+
+  middlewares:
+
+    # -------------------------------------------------------------------------
+    # bg-headers -- global response headers (one middleware does all of it)
+    # -------------------------------------------------------------------------
+    # HSTS (mild): 1 year, NO includeSubdomains, NO preload -- safe for a mixed
+    # fleet, each host asserts only itself. NO forceSTSHeader: Traefik then
+    # emits Strict-Transport-Security ONLY on HTTPS (TLS) responses, never on
+    # the http entrypoint -- so a service that is intentionally HTTP-only never
+    # receives an HSTS header at all.
+    # Plus nosniff, and fixed BAUER GROUP brand values for Server /
+    # X-Powered-By / X-Solution-Provider. Setting them to a constant both
+    # advertises us AND masks the real backend: the fixed value overwrites the
+    # upstream's `nginx/1.25`, `PHP/8.3`, `Express` etc., so tools that read
+    # those headers see something meaningful instead of a version to fingerprint.
+    bg-headers:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: false
+        stsPreload: false
+        contentTypeNosniff: true
+        customResponseHeaders:
+          Server: "BAUER GROUP Edge"
+          X-Powered-By: "BAUER GROUP"
+          X-Solution-Provider: "BAUER GROUP"
+
+    # -------------------------------------------------------------------------
+    # bg-compress -- global compression
+    # -------------------------------------------------------------------------
+    # Named bg-compress, NOT `gzip`: Coolify already defines a `gzip` middleware
+    # in coolify.yaml, and reusing the name in the same @file namespace would
+    # collide. Excludes text/event-stream so SSE is never buffered/broken
+    # (Traefik compress + SSE is a documented hazard), plus already-compressed
+    # media. Coolify's WebSockets (/app soketi, /terminal/ws) are Upgrade
+    # connections and pass through uncompressed.
+    bg-compress:
+      compress:
+        excludedContentTypes:
+          - text/event-stream
+          - image/jpeg
+          - image/png
+          - image/webp
+          - image/avif
+          - image/gif
+          - video/mp4
+          - video/webm
+          - audio/mpeg
+          - audio/ogg
+          - application/zip
+          - application/gzip
+          - application/x-bzip2
+          - application/x-7z-compressed
+          - application/x-rar-compressed
+          - application/x-tar
+        minResponseBodyBytes: 256
+
+    # -------------------------------------------------------------------------
+    # bg-default -- the chain wired at both entrypoints in ../docker-compose.yml
+    # -------------------------------------------------------------------------
+    # Deliberately NOT global (would break apps / fight Coolify):
+    #   * X-Frame-Options / Permissions-Policy -- break apps that legitimately
+    #     iframe or use camera/mic/geolocation.
+    #   * a global rate-limit -- an entrypoint rate-limit counts per source IP
+    #     across ALL apps combined, far too coarse for CGNAT; do DoS at the edge.
+    #   * HTTP->HTTPS redirect -- Coolify already does this per app, and a
+    #     global one would fight the ACME HTTP-01 challenge.
+    # Add any of those per app if a specific app needs them.
+    bg-default:
+      chain:
+        middlewares:
+          - bg-compress
+          - bg-headers
+
+tls:
+
+  options:
+
+    # -------------------------------------------------------------------------
+    # default -- global TLS policy for every router
+    # -------------------------------------------------------------------------
+    # Coolify defines no `tls` block, so this `default` is authoritative and
+    # applies to all routers (incl. the Coolify UI) with no per-app label.
+    #
+    # minVersion TLS 1.1 keeps legacy clients / feature phones online (the
+    # BAUER GROUP EDGEPROXY posture). TLS 1.0 is intentionally NOT enabled
+    # (POODLE / BEAST / SWEET32). NOTE: TLS 1.1 + CBC-SHA1 + non-PFS RSA is
+    # WEAKER than 1.2 and FAILS PCI-DSS -- for an admin/payment app that needs
+    # strict TLS, add a per-app `tls.options=<name>@file` block (1.2/1.3) on
+    # that app's router; it overrides this default for that router only.
+    default:
+      minVersion: VersionTLS11
+      sniStrict: false
+      cipherSuites:
+        # TLS 1.3 ciphers negotiate automatically and are not listed.
+        # TLS 1.2 modern AEAD
+        - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+        - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+        - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
+        - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
+        # TLS 1.2 legacy CBC (older Android, iOS 9, IE on Win7)
+        - TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256
+        - TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256
+        - TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA
+        - TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
+        - TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA
+        - TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA
+        # TLS 1.2 RSA key-exchange (no PFS) -- last resort for very old clients
+        - TLS_RSA_WITH_AES_128_GCM_SHA256
+        - TLS_RSA_WITH_AES_256_GCM_SHA384
+        - TLS_RSA_WITH_AES_128_CBC_SHA
+        - TLS_RSA_WITH_AES_256_CBC_SHA
+      curvePreferences:
+        - X25519
+        - secp521r1
+        - secp384r1
+        - secp256r1
+      alpnProtocols:
+        - h2
+        - http/1.1
