@@ -1,3 +1,15 @@
+## [0.14.0](https://github.com/bauer-group/CS-Coolify/compare/v0.13.0...v0.14.0) (2026-07-14)
+
+### 🚀 Features
+
+* **network:** widened coolify network to a /16 CGNAT subnet ([0490b95](https://github.com/bauer-group/CS-Coolify/commit/0490b9503f7fbd106cbbeaa1e8c6759622d04b8f))
+* **proxy:** added optional hardened Coolify Traefik proxy ([b0e1cd6](https://github.com/bauer-group/CS-Coolify/commit/b0e1cd6f075b380b1bd9c82c9794bf500f41f917))
+
+### ♻️ Refactoring
+
+* **proxy:** applied hardening globally instead of opt-in toolbox ([2dc1b39](https://github.com/bauer-group/CS-Coolify/commit/2dc1b397a6147c12f79f5c1f09379afdd34868aa))
+* **proxy:** applied hardening globally instead of opt-in toolbox ([705efcd](https://github.com/bauer-group/CS-Coolify/commit/705efcd01e7af959887f5750c0b2b53d8d33c5dc))
+
 ## [0.13.0](https://github.com/bauer-group/CS-Coolify/compare/v0.12.2...v0.13.0) (2026-06-17)
 
 ### 🚀 Features
