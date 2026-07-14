@@ -1,0 +1,246 @@
+# =============================================================================
+# BAUER GROUP - Hardened Coolify Traefik Proxy (OPTIONAL)
+# =============================================================================
+# Drop-in REPLACEMENT for Coolify's auto-generated Traefik proxy compose.
+# Paste this into the Coolify UI:  Server -> Proxy -> Configuration  (editor),
+# then Save + Restart Proxy. Pair it with the dynamic config in ./dynamic/
+# (Server -> Proxy -> Dynamic Configurations). See ./README.md for full steps.
+#
+# -----------------------------------------------------------------------------
+# READ THIS FIRST -- Coolify OWNS this file, not you.
+# -----------------------------------------------------------------------------
+# Coolify treats the proxy compose as a GENERATED artifact. On a proxy
+# REGENERATION (server revalidation, forced regenerate, empty config, or a
+# proxy-type change) Coolify rebuilds the WHOLE compose from its hardcoded
+# template and preserves ONLY custom `command:` flags whose prefix is not
+# template-owned. Everything else -- image, ports, volumes, healthcheck,
+# labels, restart, extra_hosts, networks, cap_drop, security_opt,
+# oom_score_adj, logging, stop_grace_period -- is reverted to Coolify stock.
+# (Documented behaviour: coollabsio/coolify issue #3018.)
+#
+# What that means for the hardening below:
+#   [DURABLE]      survives regeneration -> custom command: flags (timeouts)
+#                  + everything in ./dynamic/ (TLS options + middlewares)
+#   [BEST-EFFORT]  holds through normal restarts, reverts to Coolify stock on
+#                  a full regeneration. Harmless if reverted (falls back to a
+#                  working, unhardened proxy). Re-paste this file to restore.
+#
+# The load-bearing Coolify contract (container name, `coolify` network,
+# `http`/`https` entrypoints, `letsencrypt` HTTP-01 resolver, docker + file
+# providers, /traefik mount, extra_hosts, HTTP/3) is preserved BYTE-FOR-BYTE
+# so every Coolify-deployed app keeps routing. Do not rename those.
+# =============================================================================
+
+name: coolify-proxy
+
+networks:
+  # [HARD CONSTRAINT] External network created by Coolify. Every deployed app
+  # attaches here; the proxy MUST join it or nothing routes. Do not rename.
+  coolify:
+    external: true
+
+services:
+  traefik:
+    # [HARD CONSTRAINT] Coolify drives the proxy lifecycle + status detection
+    # purely by this container name (docker stop/rm/ps grep). Renaming makes
+    # Coolify think the proxy is down and spawn a competing coolify-proxy that
+    # collides on ports 80/443. Never change.
+    container_name: coolify-proxy
+
+    # [BEST-EFFORT] Pinned to v3.7 (tested). Coolify's template default is
+    # currently v3.6 -- on a full regeneration Coolify reverts this to its
+    # template version. Re-paste to restore v3.7, or upgrade Coolify so its
+    # template ships v3.7+. Floating `traefik:v3` would auto-track v3 minors
+    # but Coolify would still overwrite it on regen.
+    image: traefik:v3.7
+    restart: unless-stopped
+
+    # [HARD CONSTRAINT] Lets Traefik reach host-bound services (Coolify relies
+    # on this for some integrations). Kept identical to the stock template.
+    extra_hosts:
+      - host.docker.internal:host-gateway
+
+    networks:
+      - coolify
+
+    # -------------------------------------------------------------------------
+    # [BEST-EFFORT] Container-level hardening (reverts to stock on regen).
+    # -------------------------------------------------------------------------
+    # Traefik needs exactly one Linux capability -- NET_BIND_SERVICE to bind
+    # the privileged ports 80/443. Everything else is dropped. Docker-socket
+    # access works because the container runs as root (uid 0 == socket owner),
+    # which needs no DAC_OVERRIDE. Matches the BAUER GROUP EDGEPROXY stack.
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    # Graceful drain window for in-flight requests on stop/restart.
+    stop_grace_period: 30s
+    # OOM bias -- light protection only, per the BAUER GROUP OOM hierarchy:
+    #   sshd/dockerd -500  >  Traefik -50 (this)  >  apps 0  >  monitoring +200
+    # A reverse proxy without backends is dead weight, so it sits only slightly
+    # above the app tier -- enough to outlive a restart loop, not artificially
+    # shielded. Note: Coolify's stock proxy sets no oom bias at all.
+    oom_score_adj: -50
+
+    # -------------------------------------------------------------------------
+    # Ports -- [HARD CONSTRAINT] for 80/443, dashboard port removed by choice.
+    # -------------------------------------------------------------------------
+    # Kept in Coolify's exact bare form (binds 0.0.0.0). We intentionally do
+    # NOT add explicit [::] dual-stack bindings here: on a host without IPv6
+    # a `[::]:80` publish can fail container start, and this array reverts on
+    # regen anyway. IPv6 ingress is better handled at the host/DNS layer.
+    #
+    # The stock template also publishes `8080:8080` (Traefik dashboard). We
+    # drop it: with `--api.insecure=false` nothing serves on :8080 in prod, so
+    # it only ever exposed a dead port -- and we route no dashboard at all
+    # (see labels + command). Dashboard = OFF by choice.
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3 (QUIC) -- kept to match stock HTTP/3 support
+
+    # -------------------------------------------------------------------------
+    # [BEST-EFFORT] Docker log rotation + non-blocking driver (reverts on regen)
+    # -------------------------------------------------------------------------
+    # `mode: non-blocking` is the important bit: if the json-file ring buffer
+    # fills, the kernel default BLOCKS the container's write() calls -- on an
+    # edge proxy that stalls request handling behind log writes. Non-blocking
+    # drops log lines instead (logs are non-critical, serving traffic is).
+    # Coolify's stock proxy sets no logging block -> unbounded, blocking logs.
+    logging:
+      driver: json-file
+      options:
+        mode: non-blocking
+        max-buffer-size: 4m
+        max-size: 50m
+        max-file: "5"
+
+    volumes:
+      # [HARD CONSTRAINT] Docker provider needs the socket. Kept :ro to match
+      # stock (note: :ro on a unix socket protects the inode only, not the
+      # Docker API -- but we keep Coolify's exact form for compatibility).
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # [HARD CONSTRAINT] Coolify's proxy data dir. Maps to /traefik inside:
+      #   host /data/coolify/proxy/dynamic/  -> /traefik/dynamic/  (file provider)
+      #   host /data/coolify/proxy/acme.json -> /traefik/acme.json (ACME storage)
+      # Coolify writes its reserved coolify.yaml here; your ./dynamic/*.yml go
+      # alongside it. Do not change this mount.
+      - /data/coolify/proxy/:/traefik
+
+    # -------------------------------------------------------------------------
+    # Command flags
+    # -------------------------------------------------------------------------
+    # [KEEP] = Coolify template-owned flags. Reproduced verbatim so a regen is
+    #          a no-op for them. Removing/renaming these breaks Coolify or apps.
+    # [DURABLE ADD] = BAUER GROUP additions whose prefix is NOT template-owned,
+    #          so Coolify's extractCustomProxyCommands() PRESERVES them across
+    #          regeneration. This is the durable command-flag hardening surface.
+    #
+    # Do NOT try to add extra cert resolvers here (e.g. a DNS-01 cloudflare
+    # resolver): the `--certificatesresolvers.` prefix is template-owned, so
+    # Coolify silently DROPS custom resolvers on regen (and Traefik resolvers
+    # are static-only, so the file provider can't hold them either). HTTP-01
+    # `letsencrypt` is the only durable resolver in a Coolify proxy.
+    command:
+      # ---- Healthcheck ping endpoint (consumed by healthcheck below) --------
+      # `--ping=true` matches the template prefix `--ping=` -> [KEEP] (regen
+      # no-op). `--ping.entrypoint=http` does NOT start with `--ping=` (it's
+      # `--ping.`), so Coolify PRESERVES it as a custom flag -> [DURABLE]. Same
+      # net effect either way; distinguished here only for precision.
+      - "--ping=true"
+      - "--ping.entrypoint=http"
+
+      # ---- [KEEP] API/dashboard feature enabled but NOT routed/exposed -------
+      # api@internal exists internally; we publish no 8080 and define no
+      # dashboard router (see labels) -> dashboard is unreachable = OFF.
+      # `--api.` is template-owned, so trying to set it to false would revert
+      # on regen anyway; leaving it as stock keeps a regen a no-op.
+      - "--api.dashboard=true"
+      - "--api.insecure=false"
+
+      # ---- [KEEP] Entrypoints http(:80) / https(:443) -- names are a HARD ---
+      # CONSTRAINT: every Coolify-deployed app labels itself entrypoints=http /
+      # entrypoints=https. Renaming breaks all deployed apps.
+      - "--entrypoints.http.address=:80"
+      - "--entrypoints.https.address=:443"
+      - "--entrypoints.http.http.encodequerysemicolons=true"
+      - "--entryPoints.http.http2.maxConcurrentStreams=250"
+      - "--entrypoints.https.http.encodequerysemicolons=true"
+      - "--entryPoints.https.http2.maxConcurrentStreams=250"
+      - "--entrypoints.https.http3"
+
+      # ---- [KEEP] Providers ---------------------------------------------------
+      - "--providers.file.directory=/traefik/dynamic/"
+      - "--providers.file.watch=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+
+      # ---- [KEEP] ACME -- letsencrypt, HTTP-01 on the http entrypoint --------
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=http"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/traefik/acme.json"
+
+      # ---- [DURABLE ADD] respondingTimeouts (per entrypoint) -----------------
+      # Prefix `--entrypoints.<ep>.transport.*` is NOT template-owned -> these
+      # survive Coolify regeneration. Values mirror the BAUER GROUP EDGEPROXY
+      # stack:
+      #   readTimeout=0s   no upper bound on request body -> large/slow uploads
+      #                    (S3/MinIO multipart, mobile), long webhooks.
+      #   writeTimeout=0s  no upper bound on response -> SSE / event-stream,
+      #                    streaming downloads.
+      #   idleTimeout=300s close keepalive after 5 min (bumped from Traefik's
+      #                    180s so WebSocket apps that ping < every 3 min live).
+      # Slowloris hardening: set readTimeout to e.g. 600s if you need a hard
+      # single-connection cap (still allows 100 MB uploads on slow links).
+      - "--entrypoints.http.transport.respondingTimeouts.readTimeout=0s"
+      - "--entrypoints.http.transport.respondingTimeouts.writeTimeout=0s"
+      - "--entrypoints.http.transport.respondingTimeouts.idleTimeout=300s"
+      - "--entrypoints.https.transport.respondingTimeouts.readTimeout=0s"
+      - "--entrypoints.https.transport.respondingTimeouts.writeTimeout=0s"
+      - "--entrypoints.https.transport.respondingTimeouts.idleTimeout=300s"
+
+      # ---- [DURABLE ADD, OPT-IN] Always-on BAUER GROUP response header -------
+      # Applies the bg-provider@file middleware (X-Solution-Provider header) to
+      # every router on each entrypoint. Prefix `--entrypoints.<ep>.http.
+      # middlewares=` is NOT template-owned -> durable.
+      #
+      # DISABLED BY DEFAULT to keep this compose self-sufficient: an entrypoint
+      # middleware that references bg-provider@file HARD-REQUIRES ./dynamic/
+      # bg-middlewares.yml to be installed. If it is missing, Traefik cannot
+      # resolve the reference and EVERY router (including Coolify's own UI)
+      # errors. Enable these two lines ONLY AFTER bg-middlewares.yml is live in
+      # Server -> Proxy -> Dynamic Configurations.
+      # - "--entrypoints.http.http.middlewares=bg-provider@file"
+      # - "--entrypoints.https.http.middlewares=bg-provider@file"
+
+    labels:
+      # [HARD CONSTRAINT] Coolify management markers -- how Coolify recognises
+      # this container as its managed proxy. Never remove.
+      - traefik.enable=true
+      - coolify.managed=true
+      - coolify.proxy=true
+      # NOTE: the stock template also adds a `traefik` dashboard router
+      # (traefik.http.routers.traefik.* -> api@internal). We omit it on purpose
+      # -> no dashboard route -> dashboard OFF.
+      #
+      # CAVEAT after a full regen: Coolify re-adds that router serving
+      # api@internal on the http/https entrypoints (NOT on :8080) with default
+      # rule Host(`coolify-proxy`) -- which is trivially forgeable via a spoofed
+      # Host header, so treat the dashboard as reachable again until you
+      # re-paste this compose. On PRODUCTION-mode Coolify the re-added stock
+      # keeps --api.insecure=false (the :8080 publish is then just a dead port);
+      # a DEVELOPMENT-mode Coolify instead sets --api.insecure=true and
+      # re-exposes the dashboard directly on :8080. Bottom line: re-paste the
+      # hardened compose promptly after any proxy regeneration.
+
+    healthcheck:
+      # [HARD CONSTRAINT-ish] Kept identical to Coolify's stock check. Coolify's
+      # status detection reads container state, not this check, but matching it
+      # keeps a regen a no-op and avoids surprises.
+      test: "wget -qO- http://localhost:80/ping || exit 1"
+      interval: 4s
+      timeout: 2s
+      retries: 5

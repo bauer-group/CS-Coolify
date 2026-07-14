@@ -109,6 +109,7 @@ sudo ./coolify.sh start
 ├── migrate.sh               # Host-to-host migration script
 ├── README.md                # This file
 ├── .env                     # Environment configuration (generated)
+├── proxy/                   # Optional hardened Traefik proxy override (see proxy/README.md)
 └── server-setup/            # Server provisioning scripts
     ├── install.sh           # Interactive main installer
     ├── 01-system.sh         # System packages & configuration
@@ -126,7 +127,7 @@ sudo ./coolify.sh start
 ├── databases/               # Database configurations
 ├── services/                # Service configurations
 ├── backups/                 # Coolify-managed backups
-├── proxy/                   # Traefik proxy config (auto-generated)
+├── proxy/                   # Traefik proxy config (auto-generated; optional hardening in /opt/coolify/proxy)
 └── webhooks-during-maintenance/
 
 /data/system/                # System services data
@@ -295,6 +296,21 @@ docker stop coolify-watchtower
 | coolify-db | postgres:18 | PostgreSQL database |
 | coolify-redis | redis:8 | Cache and queue |
 | coolify-watchtower | containrrr/watchtower | Auto-update service |
+
+## Optional: Hardened Traefik Proxy
+
+Coolify auto-generates and manages its own Traefik reverse proxy. The
+[`proxy/`](proxy/) folder ships an **optional** hardened drop-in replacement —
+tuned timeouts, Linux capability drop, log rotation, and a reusable middleware +
+TLS-options toolbox for your apps — that preserves Coolify's routing contract
+(container name, `coolify` network, `http`/`https` entrypoints, `letsencrypt`
+resolver) byte-for-byte.
+
+It is entirely opt-in and does not affect the control-plane stack above. Because
+Coolify treats the proxy compose as a generated artifact, part of the hardening
+is durable and part reverts on a proxy regeneration — see
+[`proxy/README.md`](proxy/README.md) for the durable-vs-best-effort split,
+install steps, and rollback.
 
 ## Troubleshooting
 
