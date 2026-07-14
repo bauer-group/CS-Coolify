@@ -68,10 +68,11 @@ middlewares — an opt-in toolbox would sit unused. Instead the defaults apply
     `forceSTSHeader`, so it is never sent on the http entrypoint and an
     intentionally HTTP-only service is unaffected), `X-Content-Type-Options:
     nosniff`, and fixed BAUER GROUP brand values for `Server` (`BAUER GROUP
-    Edge`) / `X-Powered-By` / `X-Solution-Provider` — these advertise us and,
-    being constant, mask the real backend software + version. Referrer-Policy
-    is intentionally left to apps/browsers (a global one would override an
-    app's own policy).
+    Edge`) and `X-Powered-By` (`BAUER GROUP`) — constant values that advertise
+    us and, being fixed, mask the real backend software + version. (A third
+    brand header, `X-Solution-Provider`, ships **commented-out** in the file;
+    uncomment it to send it too.) Referrer-Policy is intentionally left to
+    apps/browsers — a global one would override an app's own policy.
 - **Global TLS policy** — `tls.options.default` with `minVersion: TLS 1.1` and a
   legacy-compatible cipher list (the EDGEPROXY posture — keeps old clients
   online). Applies to every router; **override per app for stricter TLS**.
@@ -127,8 +128,8 @@ with [`docker-compose.yml`](docker-compose.yml) → **Save** → **Restart Proxy
 docker ps --filter name=coolify-proxy
 docker port coolify-proxy
 
-# global defaults are live: HSTS + brand header on any app response
-curl -sI https://<one-of-your-app-domains> | grep -iE 'strict-transport|x-solution-provider'
+# global defaults are live: HSTS + brand headers on any app response
+curl -sI https://<one-of-your-app-domains> | grep -iE 'strict-transport|server:|x-powered-by'
 
 # an existing app still serves + renews certs
 curl -I https://<one-of-your-app-domains>

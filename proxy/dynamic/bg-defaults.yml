@@ -44,7 +44,7 @@ http:
         stsSeconds: 31536000
         stsIncludeSubdomains: false
         stsPreload: false
-        contentTypeNosniff: true
+        # contentTypeNosniff: true
         customResponseHeaders:
           Server: "BAUER GROUP Edge"
           X-Powered-By: "BAUER GROUP"
