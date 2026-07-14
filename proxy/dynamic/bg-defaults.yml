@@ -48,7 +48,7 @@ http:
         customResponseHeaders:
           Server: "BAUER GROUP Edge"
           X-Powered-By: "BAUER GROUP"
-          X-Solution-Provider: "BAUER GROUP"
+          # X-Solution-Provider: "BAUER GROUP"
 
     # -------------------------------------------------------------------------
     # bg-compress -- global compression
