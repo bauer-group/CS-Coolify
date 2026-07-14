@@ -193,9 +193,23 @@ networks:
     driver: bridge
     name: coolify
     enable_ipv6: true
+    # IPv4 uses a /16 from the RFC 6598 CGNAT space (100.64.0.0/10) instead of a
+    # /24: 65534 host IPs vs 254. Every Coolify-deployed app container attaches
+    # to this network (so Traefik can route it), so a busy host exhausts a /24.
+    # 100.65.0.0/16 sits OUTSIDE the Docker daemon address-pool (10.128.0.0/9,
+    # see server-setup/03-docker.sh) -> it never collides with the auto-created
+    # per-resource networks, and it needs no daemon.json change.
+    # NOTE: 100.65.0.0/16 is still inside Tailscale's 100.64.0.0/10 range, so
+    # this is conflict-free only on hosts that do not run Tailscale in that
+    # block. Changing this subnet on a LIVE host is NOT hot-swappable -- see
+    # "Container Network Subnet" in README.md.
     ipam:
       config:
-        - subnet: 10.128.0.0/24
-          gateway: 10.128.0.1
-        - subnet: fdff:8000::/64
-          gateway: fdff:8000::1
+        - subnet: 100.65.0.0/16
+          gateway: 100.65.0.1
+        # IPv6 keeps the "65" motif but stays in the daemon's auto-pool half
+        # (fdff:8000::/17); fdff:100:65::/64 would fall in docker0's fdff::/17
+        # (fixed-cidr-v6) and be rejected as an overlapping pool. A /64 is
+        # 2^64 addresses -- size is never the constraint here.
+        - subnet: fdff:8000:65::/64
+          gateway: fdff:8000:65::1

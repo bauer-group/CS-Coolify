@@ -237,6 +237,41 @@ When using HTTPS, Traefik automatically routes:
 - `/app` → `coolify-realtime:6001` (realtime)
 - `/terminal/ws` → `coolify-realtime:6002` (terminal)
 
+### Container Network Subnet
+
+Every app Coolify deploys attaches to the `coolify` Docker network so Traefik
+can route to it, so that network's size caps how many containers a host can run.
+The default here is **`100.65.0.0/16`** (65534 IPs, IPv6 `fdff:8000:65::/64`),
+chosen over a `/24` (254 IPs) because a busy host exhausts a `/24`. The IPv4
+range sits in RFC 6598 CGNAT space, **outside** the Docker daemon address-pool
+(`10.128.0.0/9`, see [`server-setup/03-docker.sh`](server-setup/03-docker.sh)),
+so it never collides with the auto-created per-resource networks and needs no
+`daemon.json` change.
+
+> **Caveats:** `100.65.0.0/16` is still inside Tailscale's `100.64.0.0/10` — it
+> is conflict-free only on hosts not running Tailscale in that block (check with
+> `ip route | grep 100.64`). The IPv6 `/64` deliberately stays in the pool half
+> `fdff:8000::/17`; a `fdff:100:65::/64` would overlap docker0's
+> `fixed-cidr-v6: fdff::/17` and be rejected.
+
+**Changing the subnet is NOT hot-swappable** — Docker will not re-subnet an
+existing network on `up`. On a live host it is a maintenance-window operation:
+
+```bash
+# 1. Edit the coolify network subnet in docker-compose.yml
+# 2. Detach everything from the network (apps briefly go down):
+sudo ./coolify.sh stop
+docker ps --filter network=coolify -q | xargs -r docker stop
+# 3. Remove + recreate the network with the new subnet:
+docker network rm coolify
+sudo ./coolify.sh start
+# 4. Redeploy apps from the Coolify UI so they reconnect to the new network
+#    (a plain `docker start` fails: stopped containers point at the old net ID)
+```
+
+Do this before deploying apps where possible; on an established host, treat it
+as a planned migration.
+
 ### Changing the Hostname
 
 There are **three independent "hostnames"** in this stack. Changing one does
