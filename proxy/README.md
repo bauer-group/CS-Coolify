@@ -66,13 +66,13 @@ middlewares — an opt-in toolbox would sit unused. Instead the defaults apply
     `/terminal/ws`) are Upgrade connections and pass through untouched.
   - `bg-headers` — HSTS (1 year, **no** includeSubdomains, **HTTPS-only** — no
     `forceSTSHeader`, so it is never sent on the http entrypoint and an
-    intentionally HTTP-only service is unaffected), `X-Content-Type-Options:
-    nosniff`, and fixed BAUER GROUP brand values for `Server` (`BAUER GROUP
-    Edge`) and `X-Powered-By` (`BAUER GROUP`) — constant values that advertise
-    us and, being fixed, mask the real backend software + version. (A third
-    brand header, `X-Solution-Provider`, ships **commented-out** in the file;
-    uncomment it to send it too.) Referrer-Policy is intentionally left to
-    apps/browsers — a global one would override an app's own policy.
+    intentionally HTTP-only service is unaffected), plus fixed BAUER GROUP brand
+    values for `Server` (`BAUER GROUP Edge`) and `X-Powered-By` (`BAUER GROUP`)
+    — constant values that advertise us and, being fixed, mask the real backend
+    software + version. `X-Content-Type-Options: nosniff` and a third brand
+    header `X-Solution-Provider` both ship **commented-out** in the file —
+    uncomment either to enable it. Referrer-Policy is intentionally left to
+    apps/browsers (a global one would override an app's own policy).
 - **Global TLS policy** — `tls.options.default` with `minVersion: TLS 1.1` and a
   legacy-compatible cipher list (the EDGEPROXY posture — keeps old clients
   online). Applies to every router; **override per app for stricter TLS**.
