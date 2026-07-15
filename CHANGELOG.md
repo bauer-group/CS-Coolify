@@ -1,3 +1,9 @@
+## [0.14.1](https://github.com/bauer-group/CS-Coolify/compare/v0.14.0...v0.14.1) (2026-07-15)
+
+### 🐛 Bug Fixes
+
+* **proxy:** dropped bg-default from the http entrypoint ([64744b1](https://github.com/bauer-group/CS-Coolify/commit/64744b1644d9ae07c361dd2ecfe20efd2f1e9cab))
+
 ## [0.14.0](https://github.com/bauer-group/CS-Coolify/compare/v0.13.0...v0.14.0) (2026-07-14)
 
 ### 🚀 Features
