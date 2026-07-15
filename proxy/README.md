@@ -54,12 +54,12 @@ about routing changes:
 
 Coolify generates every app's Traefik labels itself, so nobody hand-adds `@file`
 middlewares — an opt-in toolbox would sit unused. Instead the defaults apply
-**globally**, to every router, with zero per-app configuration.
+**globally**, to every https router, with zero per-app configuration.
 
 **Durable (survives regeneration):**
 
 - **Global default middlewares** ([`dynamic/bg-defaults.yml`](dynamic/bg-defaults.yml)),
-  wired at both entrypoints so they hit every app **and** Coolify's own
+  wired at the **https** entrypoint so they hit every app **and** Coolify's own
   UI/realtime routes:
   - `bg-compress` — compression, excluding `text/event-stream` (SSE stays
     unbuffered) and already-compressed media. WebSockets (Coolify's `/app` +
@@ -86,6 +86,17 @@ entrypoint rate-limit counts per source IP across *all* apps — too coarse for
 CGNAT; do DoS at the edge), and an HTTP→HTTPS redirect (Coolify does it per app,
 and a global one would fight the ACME HTTP-01 challenge). Add those per app.
 
+**Why the middlewares are on `https` only, not `http`:** the http entrypoint
+carries Traefik's internal routers (`ping@internal`, `acme-http@internal`).
+Traefik applies its first config generation as soon as the `internal` provider
+reports, without waiting for the file provider — so a `@file` reference on http
+loses that race and logs one ERR pair per proxy start ([traefik#9779](https://github.com/traefik/traefik/issues/9779),
+`kind/bug/confirmed`, won't-fix for now). It self-heals in milliseconds, but
+keeping http free of `@file` removes the noise by construction. Cost is
+near-zero: Coolify redirects apps to HTTPS per app, and `bg-headers` emits HSTS
+only over TLS anyway. Only an intentionally HTTP-only app loses compression and
+the brand headers.
+
 **Best-effort (reverts on regeneration):**
 
 - Traefik pinned to **v3.7** (replaces Coolify's older template default)
@@ -102,8 +113,9 @@ and a global one would fight the ACME HTTP-01 challenge). Add those per app.
 ## Install
 
 > **Order matters — dynamic config FIRST.** The compose references
-> `bg-default@file` on both entrypoints; if that middleware isn't defined yet,
-> Traefik can't resolve it and *every* router errors (including the Coolify UI).
+> `bg-default@file` on the https entrypoint; if that middleware isn't defined
+> yet, Traefik can't resolve it and *every https* router errors (including the
+> Coolify UI).
 
 ### 1. Dynamic config (the global defaults — install first)
 
@@ -165,18 +177,28 @@ logs or the app's generated labels).
 
 > To change a default globally, edit the `bg-default` chain / `bg-headers` /
 > `tls.options.default` in `bg-defaults.yml` — but do **not** remove the file
-> while the entrypoint flags are live.
+> while the entrypoint flag is live.
 
 ---
 
 ## Rollback to Coolify stock
 
-1. Remove the two `--entrypoints.*.http.middlewares=bg-default@file` lines from
+> **The DURABLE parts do not roll back by pasting the stock compose.** That is
+> the flip side of durability: `--entrypoints.*.http.middlewares=` is a custom
+> flag, so Coolify carries it into the regenerated compose. The editor then
+> shows stock while the running container still has the flag — verify with
+> `docker inspect coolify-proxy --format '{{json .Args}}'`, not with the editor.
+> Same for `bg-defaults.yml`: it lives in the dynamic dir and a compose rollback
+> never touches it, so its `tls.options.default` keeps applying to every https
+> router under the stock compose too. Roll both back explicitly.
+
+1. Remove the `--entrypoints.https.http.middlewares=bg-default@file` line from
    the proxy compose (Server → Proxy → Configuration) → Restart Proxy — or
    *Reset to default* / trigger a server revalidation to restore stock wholesale.
+   Confirm it is gone from the *running container's* args, not just the editor.
 2. **Only then** delete `bg-defaults.yml` in Server → Proxy → Dynamic
-   Configurations. Order matters: never leave the entrypoint flags pointing at a
-   deleted middleware, or every router errors.
+   Configurations. Order matters: never leave the entrypoint flag pointing at a
+   deleted middleware, or every https router errors.
 
 ---
 
