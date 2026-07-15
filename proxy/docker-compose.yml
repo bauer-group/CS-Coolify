@@ -202,41 +202,53 @@ services:
       - "--entrypoints.https.transport.respondingTimeouts.writeTimeout=0s"
       - "--entrypoints.https.transport.respondingTimeouts.idleTimeout=300s"
 
-      # ---- [DURABLE ADD] Default middlewares -- https entrypoint ONLY ---------
+      # ---- [DURABLE ADD] Global default middlewares (applied to ALL routers) --
       # Wires the bg-default chain (compression + security headers + BG brand)
-      # from ./dynamic/bg-defaults.yml onto every router of the https entrypoint
-      # -- every Coolify app AND Coolify's own UI/realtime routes -- with no
+      # from ./dynamic/bg-defaults.yml onto every router of each entrypoint --
+      # every Coolify app AND Coolify's own UI/realtime routes -- with no
       # per-app labels (Coolify generates app labels itself, so an opt-in
       # toolbox would sit unused). Prefix `--entrypoints.<ep>.http.middlewares=`
       # is NOT template-owned -> Coolify preserves these across regeneration,
       # and Coolify sets no entrypoint middlewares itself, so there is no
       # conflict.
       #
-      # WHY NOT ON THE http ENTRYPOINT -- deliberate, do not "fix" this:
-      # Traefik applies the FIRST config generation as soon as the `internal`
-      # provider has reported; it does NOT wait for the file provider
-      # (requiredProvider="internal" in configurationwatcher.go, and the
-      # internal provider sends synchronously while the file provider is
-      # throttled). In that first generation the internal routers already exist
-      # but the middleware map is still empty -> Traefik logs, once per start:
+      # ---------------------------------------------------------------------
+      # EXPECTED LOG NOISE -- do NOT "fix" this by dropping the http line.
+      # ---------------------------------------------------------------------
+      # Exactly once per proxy start, Traefik logs:
       #   ERR middleware "bg-default@file" does not exist routerName=ping@internal
       #   ERR middleware "bg-default@file" does not exist routerName=acme-http@internal
-      # It self-heals milliseconds later (verified: both routers end up
-      # status=enabled with the chain attached), but it is permanent log noise.
-      # Upstream: traefik#9779, kind/bug/confirmed, "won't be solved in a near
-      # future". Both internal routers live on http (--ping.entrypoint=http,
-      # httpchallenge.entrypoint=http), so leaving http without a @file
-      # reference removes the race by construction -- there is nothing to
-      # resolve. https is safe: --api.insecure=false means it has no internal
-      # routers at all.
-      # Cost: plain-HTTP responses get no compression and no BG brand headers.
-      # Near-zero in practice -- Coolify redirects apps to HTTPS per app, and
-      # bg-headers emits HSTS only over TLS anyway (no forceSTSHeader).
+      # This is HARMLESS and self-heals in milliseconds. It is a Traefik startup
+      # race, not a misconfiguration: Traefik applies its first config
+      # generation as soon as the `internal` provider reports and does NOT wait
+      # for the file provider (requiredProvider="internal" in
+      # configurationwatcher.go; internal sends synchronously, file is
+      # throttled). In that generation the two internal routers already exist
+      # but the middleware map is still empty. Once the file config lands the
+      # whole config is re-merged and both routers come up fine.
+      # Upstream: traefik#9779 (kind/bug/confirmed, won't-fix for now).
+      #
+      # Verified against traefik:v3.7 with this exact config -- the runtime API
+      # reports both routers status=enabled with mw=[bg-default@file], and
+      # `wget -qO- http://localhost:80/ping` returns OK. Neither the healthcheck
+      # nor the ACME HTTP-01 challenge is affected.
+      #
+      # Dropping the http line WOULD silence both lines (both internal routers
+      # live on http via --ping.entrypoint=http and httpchallenge.entrypoint=
+      # http, so http would then have no @file reference to resolve). We do NOT
+      # do that: it strips bg-headers from plain-HTTP responses, and a service
+      # that intentionally serves over HTTP would then leak its real backend --
+      # measured: `Server: nginx/1.31.2` instead of `Server: BAUER GROUP Edge`.
+      # Two documented, benign log lines beat losing that masking.
+      # (Apps that redirect HTTP->HTTPS are unaffected either way -- Traefik
+      # generates the 30x itself, so no backend header is ever exposed there.)
       #
       # HARD DEPENDENCY: ./dynamic/bg-defaults.yml MUST be installed (Server ->
       # Proxy -> Dynamic Configurations) BEFORE or together with this compose.
-      # If it is missing, Traefik cannot resolve bg-default@file and every
-      # https router (including the Coolify UI) errors. Install it FIRST.
+      # If it is missing, Traefik cannot resolve bg-default@file and EVERY router
+      # (including the Coolify UI) errors -- permanently, not just at startup.
+      # Install the dynamic file FIRST.
+      - "--entrypoints.http.http.middlewares=bg-default@file"
       - "--entrypoints.https.http.middlewares=bg-default@file"
 
     labels:

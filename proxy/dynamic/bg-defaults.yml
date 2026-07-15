@@ -5,23 +5,25 @@
 # file named `bg-defaults.yml`. Durable -- Coolify never touches user files in
 # the dynamic dir (it only regenerates its own reserved coolify.yaml).
 #
-# The middlewares are wired at the https ENTRYPOINT in ../docker-compose.yml, so
-# they apply to EVERY https router automatically -- every Coolify-deployed app
-# plus Coolify's own dashboard/realtime routes -- with NO per-app labels. That is
-# the point: Coolify generates app labels itself, so nobody hand-picks @file
+# These are wired GLOBALLY at the entrypoint level in ../docker-compose.yml, so
+# they apply to EVERY router automatically -- every Coolify-deployed app plus
+# Coolify's own dashboard/realtime routes -- with NO per-app labels. That is the
+# point: Coolify generates app labels itself, so nobody hand-picks @file
 # middlewares; an opt-in toolbox would just sit unused.
 #
-# https ONLY, on purpose: the http entrypoint carries Traefik's internal routers
-# (ping@internal, acme-http@internal), and a @file reference there loses a
-# startup race against the file provider -> one ERR pair per proxy start
-# (traefik#9779). See the long note in ../docker-compose.yml. The `tls` block
-# below is unaffected by any of this -- it applies to every https router
-# regardless of the middleware wiring.
+# EXPECTED, HARMLESS: once per proxy start Traefik logs
+#   ERR middleware "bg-default@file" does not exist routerName=ping@internal
+#   ERR middleware "bg-default@file" does not exist routerName=acme-http@internal
+# That is a Traefik startup race (traefik#9779), NOT a problem with this file --
+# the internal routers are built before the file provider has reported, and
+# self-heal milliseconds later. If these lines RECUR outside of startup, or name
+# @docker routers, THEN this file genuinely failed to load -- go look. See the
+# long note in ../docker-compose.yml for why we accept the noise.
 #
-# HARD PAIRING: ../docker-compose.yml references `bg-default@file` on the https
-# entrypoint. If THIS file is missing, Traefik cannot resolve that reference and
-# EVERY https router errors (including the Coolify UI). Always install this file
-# FIRST and never remove it while the entrypoint flag is active.
+# HARD PAIRING: ../docker-compose.yml references `bg-default@file` on both
+# entrypoints. If THIS file is missing, Traefik cannot resolve that reference
+# and EVERY router errors (including the Coolify UI). Always install this file
+# FIRST and never remove it while the entrypoint flags are active.
 #
 # Verified safe against Coolify's reserved coolify.yaml (source: Coolify
 # Server.php setupDynamicProxyConfiguration): it defines NO `tls` block, so our
