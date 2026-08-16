@@ -1,3 +1,13 @@
+## [0.15.0](https://github.com/bauer-group/CS-Coolify/compare/v0.14.2...v0.15.0) (2026-08-16)
+
+### 🚀 Features
+
+* **doctor:** added diagnosis and repair tooling ([0abf67d](https://github.com/bauer-group/CS-Coolify/commit/0abf67da2113f76d6126abf43455eba2ec1bf53d))
+
+### 🐛 Bug Fixes
+
+* **ci:** granted scopes the called modules need ([c9d7195](https://github.com/bauer-group/CS-Coolify/commit/c9d719539daffad7e63ba0eb17e2d20fada911d3))
+
 ## [0.14.2](https://github.com/bauer-group/CS-Coolify/compare/v0.14.1...v0.14.2) (2026-07-15)
 
 ### ⏪ Reverts
