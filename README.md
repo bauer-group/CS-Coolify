@@ -106,6 +106,7 @@ sudo ./coolify.sh start
 ├── docker-compose.yml       # Stack definition
 ├── setup.sh                 # Coolify setup script
 ├── coolify.sh               # Management script
+├── doctor.sh                # Diagnostics & repair script
 ├── migrate.sh               # Host-to-host migration script
 ├── README.md                # This file
 ├── .env                     # Environment configuration (generated)
@@ -170,6 +171,80 @@ sudo ./coolify.sh stop
 sudo ./coolify.sh restore /data/system/backups/coolify_backup_20241219_143022.tar.gz
 sudo ./coolify.sh start
 ```
+
+## Diagnostics & Repair
+
+```bash
+sudo ./doctor.sh <command> [options]
+```
+
+`doctor.sh` diagnoses a running stack and repairs the most common breakage after
+a container image update: **the database migrations were never applied**, so
+Coolify fails with `Undefined column ...` or a blank page until they are.
+
+| Command | Description |
+|---------|-------------|
+| `check` | Read-only diagnosis. Exits `1` when a problem was found (cron/monitoring safe) |
+| `fix` | Guided repair: backup → migrations → caches → queue workers → verification |
+| `migrate` | Apply pending database migrations only |
+| `cache` | Clear and rebuild the Laravel caches only (`optimize:clear` + `optimize`) |
+| `workers` | Restart the queue workers (`horizon:terminate`, fallback `queue:restart`) |
+| `artisan <args>` | Run any artisan command inside the Coolify container |
+| `psql [sql]` | Open a psql shell, or run a single statement |
+| `logs [lines]` | Show the Laravel application log (default: 100 lines) |
+| `help` | Show help |
+
+| Option | Description |
+|--------|-------------|
+| `-n`, `--dry-run` | Change nothing. For migrations this prints the actual SQL (`migrate --pretend`) |
+| `-y`, `--yes` | Assume "yes" for all prompts |
+| `--force` | Pass `--force` to `artisan migrate` (see below) |
+| `--no-backup` | Skip the safety database dump before migrating |
+| `--expect-column <table.column>` | Verify this column exists afterwards. Repeatable |
+
+### Typical repair after an update
+
+```bash
+# 1. What is actually wrong?
+sudo ./doctor.sh check
+
+# 2. What would the repair do? (prints the real SQL, changes nothing)
+sudo ./doctor.sh fix --dry-run
+
+# 3. Repair. Take the column from the error message to verify the outcome.
+sudo ./doctor.sh fix --expect-column applications.domain_dns_statuses
+```
+
+`check`, `artisan`, `psql` and `logs` are read-only and need only Docker access.
+`fix`, `migrate`, `cache` and `workers` change state and require root.
+
+### Why `--force` is opt-in
+
+Coolify runs with `APP_ENV=production`, so Laravel asks *"Are you sure you want to
+run this command?"* before migrating. `--force` skips exactly that prompt.
+
+The prompt is left in place by default — it is one more pair of eyes on a schema
+change. But it needs a **real terminal**: without one, Symfony answers with the
+default (*no*) and the migration is silently cancelled while the command still
+looks like it succeeded. `doctor.sh` therefore refuses upfront instead of
+pretending to work:
+
+```bash
+# Interactive shell: confirm the prompt yourself (default)
+sudo ./doctor.sh fix
+
+# Cron, CI, or a piped shell: no terminal, so --force is required
+sudo ./doctor.sh fix --yes --force
+```
+
+### Safety backup
+
+Before applying migrations, `doctor.sh` dumps the Coolify database to
+`/data/system/backups/coolify_db_<timestamp>.dump` (PostgreSQL custom format).
+It is skipped when nothing is pending, and can be disabled with `--no-backup`.
+On failure the restore command is printed. For a *full* archive (database, Redis,
+SSH keys, `.env`) run `sudo ./coolify.sh backup` first — `doctor.sh` deliberately
+dumps only the database, because that works even when parts of the stack are down.
 
 ## Backup & Restore
 
@@ -348,6 +423,34 @@ is durable and part reverts on a proxy regeneration — see
 install steps, and rollback.
 
 ## Troubleshooting
+
+### First stop: run the doctor
+
+```bash
+sudo ./doctor.sh check
+```
+
+Covers containers and their health, the application health endpoint, PostgreSQL,
+Redis, **pending database migrations**, failed jobs, Horizon, recent log errors
+and disk usage. See [Diagnostics & Repair](#diagnostics--repair).
+
+### "Undefined column", blank pages or 500 errors after an update
+
+The database migrations of the new image have not been applied. This is the
+single most common failure mode of this stack, because Watchtower replaces the
+container image without anyone running the migrations afterwards.
+
+```bash
+sudo ./doctor.sh fix --dry-run   # shows the SQL that is missing
+sudo ./doctor.sh fix             # backup, migrate, caches, workers, verify
+```
+
+If it still fails afterwards, the running image is older than the database
+expects — pull the current images first:
+
+```bash
+sudo ./coolify.sh update && sudo ./doctor.sh fix
+```
 
 ### Stack won't start
 

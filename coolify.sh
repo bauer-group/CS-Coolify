@@ -538,6 +538,10 @@ do_help() {
     echo -e "${BLUE}Services:${NC}"
     echo "  coolify, coolify-realtime, database-server, redis-server, watchtower"
     echo ""
+    echo -e "${BLUE}Diagnostics & Repair:${NC}"
+    echo "  ./doctor.sh check   Diagnose the stack (pending migrations, health, ...)"
+    echo "  ./doctor.sh fix     Repair after an update (migrations, caches, workers)"
+    echo ""
 }
 
 #######################################

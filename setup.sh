@@ -92,11 +92,10 @@ if [ "$SCRIPT_DIR" != "$INSTALL_DIR" ]; then
     echo "    Copying files from $SCRIPT_DIR to $INSTALL_DIR..."
 
     # Copy main files
-    cp -f "$SCRIPT_DIR/docker-compose.yml" "$INSTALL_DIR/" 2>/dev/null || true
-    cp -f "$SCRIPT_DIR/coolify.sh" "$INSTALL_DIR/" 2>/dev/null || true
-    cp -f "$SCRIPT_DIR/setup.sh" "$INSTALL_DIR/" 2>/dev/null || true
-    cp -f "$SCRIPT_DIR/update.sh" "$INSTALL_DIR/" 2>/dev/null || true
-    cp -f "$SCRIPT_DIR/README.md" "$INSTALL_DIR/" 2>/dev/null || true
+    for file in docker-compose.yml coolify.sh setup.sh update.sh \
+                migrate.sh doctor.sh README.md; do
+        cp -f "$SCRIPT_DIR/$file" "$INSTALL_DIR/" 2>/dev/null || true
+    done
 
     # Copy server-setup directory if exists
     if [ -d "$SCRIPT_DIR/server-setup" ]; then
@@ -109,9 +108,9 @@ else
 fi
 
 # Make scripts executable
-chmod +x "$INSTALL_DIR/coolify.sh" 2>/dev/null || true
-chmod +x "$INSTALL_DIR/setup.sh" 2>/dev/null || true
-chmod +x "$INSTALL_DIR/update.sh" 2>/dev/null || true
+for script in coolify.sh setup.sh update.sh migrate.sh doctor.sh; do
+    chmod +x "$INSTALL_DIR/$script" 2>/dev/null || true
+done
 
 #######################################
 # 3. Generate SSH key (if not exists)
