@@ -77,25 +77,57 @@ get_compose_cmd() {
     fi
 }
 
+# Containers of the stack. Since Coolify 4.4 realtime and the web terminal
+# run inside the coolify container -- there is no coolify-realtime anymore.
+STACK_CONTAINERS="coolify coolify-db coolify-redis"
+
+# Containers that earlier versions of this stack ran and that no longer
+# belong to it. They are removed explicitly before `up` (not only through
+# --remove-orphans) so their host ports, e.g. 6001/6002, are free again.
+LEGACY_CONTAINERS="coolify-realtime"
+
 is_stack_running() {
     # Check if all Coolify containers are running
     local running=0
-    for container in coolify coolify-db coolify-redis coolify-realtime; do
+    for container in $STACK_CONTAINERS; do
         if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
             ((running++))
         fi
     done
-    [ "$running" -eq 4 ]
+    [ "$running" -eq 3 ]
 }
 
 is_stack_stopped() {
     # Check if all Coolify containers are stopped
-    for container in coolify coolify-db coolify-redis coolify-realtime; do
+    for container in $STACK_CONTAINERS; do
         if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
             return 1
         fi
     done
     return 0
+}
+
+remove_legacy_containers() {
+    local container
+    for container in $LEGACY_CONTAINERS; do
+        if docker ps -a --format '{{.Names}}' | grep -q "^${container}$"; then
+            echo "Removing obsolete container: $container"
+            docker rm -f "$container" >/dev/null
+        fi
+    done
+}
+
+ensure_data_dirs() {
+    # Bind sources added after the initial setup. Docker would create a
+    # missing source as root:root, which the app (UID 9999) cannot write.
+    local dir
+    for dir in /data/coolify/images; do
+        if [ ! -d "$dir" ]; then
+            mkdir -p "$dir"
+            chown 9999:root "$dir"
+            chmod 700 "$dir"
+        fi
+    done
 }
 
 #######################################
@@ -109,8 +141,11 @@ do_start() {
     echo "Starting Coolify Stack..."
     echo ""
 
+    ensure_data_dirs
+    remove_legacy_containers
+
     cd "$SCRIPT_DIR"
-    $(get_compose_cmd) --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --wait 2>&1
+    $(get_compose_cmd) --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --remove-orphans --wait 2>&1
 
     echo ""
     print_success "Coolify Stack started!"
@@ -207,6 +242,8 @@ do_update() {
 
     # 2. Recreate containers with new images
     echo -e "${BLUE}[2/3] Updating containers...${NC}"
+    ensure_data_dirs
+    remove_legacy_containers
     $COMPOSE_CMD --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --remove-orphans
 
     echo ""
@@ -536,7 +573,7 @@ do_help() {
     echo "  $0 update"
     echo ""
     echo -e "${BLUE}Services:${NC}"
-    echo "  coolify, coolify-realtime, database-server, redis-server, watchtower"
+    echo "  coolify, database-server, redis-server, watchtower"
     echo ""
     echo -e "${BLUE}Diagnostics & Repair:${NC}"
     echo "  ./doctor.sh check   Diagnose the stack (pending migrations, health, ...)"

@@ -30,7 +30,6 @@ set -euo pipefail
 #   COOLIFY_CONTAINER           (default: coolify)
 #   COOLIFY_DB_CONTAINER        (default: coolify-db)
 #   COOLIFY_REDIS_CONTAINER     (default: coolify-redis)
-#   COOLIFY_REALTIME_CONTAINER  (default: coolify-realtime)
 #   COOLIFY_DB_NAME             (default: coolify)
 #   COOLIFY_DB_USER             (default: coolify)
 #   BACKUP_DIR                  (default: /data/system/backups)
@@ -42,7 +41,6 @@ set -euo pipefail
 COOLIFY_CONTAINER="${COOLIFY_CONTAINER:-coolify}"
 COOLIFY_DB_CONTAINER="${COOLIFY_DB_CONTAINER:-coolify-db}"
 COOLIFY_REDIS_CONTAINER="${COOLIFY_REDIS_CONTAINER:-coolify-redis}"
-COOLIFY_REALTIME_CONTAINER="${COOLIFY_REALTIME_CONTAINER:-coolify-realtime}"
 COOLIFY_DB_NAME="${COOLIFY_DB_NAME:-coolify}"
 COOLIFY_DB_USER="${COOLIFY_DB_USER:-coolify}"
 BACKUP_DIR="${BACKUP_DIR:-/data/system/backups}"
@@ -471,8 +469,7 @@ do_check() {
     ##### Containers #####
     print_section "Containers"
     local c health
-    for c in "$COOLIFY_CONTAINER" "$COOLIFY_DB_CONTAINER" \
-             "$COOLIFY_REDIS_CONTAINER" "$COOLIFY_REALTIME_CONTAINER"; do
+    for c in "$COOLIFY_CONTAINER" "$COOLIFY_DB_CONTAINER" "$COOLIFY_REDIS_CONTAINER"; do
         if container_running "$c"; then
             health=$(container_health "$c")
             case "$health" in
@@ -503,6 +500,17 @@ do_check() {
         check_ok "application health endpoint" "responding"
     else
         check_fail "application health endpoint" "no response on :8080/api/health"
+    fi
+
+    # Since Coolify 4.4 realtime (Laravel Reverb) runs inside the app container.
+    if docker exec "$COOLIFY_CONTAINER" curl -fsS -m 5 http://127.0.0.1:6001/up \
+        >/dev/null 2>&1; then
+        check_ok "realtime (reverb)" "responding on :6001"
+    else
+        check_fail "realtime (reverb)" "no response on :6001/up"
+    fi
+    if container_running coolify-realtime; then
+        check_warn "coolify-realtime" "obsolete since Coolify 4.4 - run: sudo ./coolify.sh update"
     fi
 
     if container_running "$COOLIFY_DB_CONTAINER"; then

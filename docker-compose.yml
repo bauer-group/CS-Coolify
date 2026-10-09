@@ -36,7 +36,9 @@ services:
         - PUSHER_APP_ID=${PUSHER_APP_ID}
         - PUSHER_APP_KEY=${PUSHER_APP_KEY}
         - PUSHER_APP_SECRET=${PUSHER_APP_SECRET}
-        - PUSHER_HOST=${PUSHER_HOST:-coolify-realtime}
+        # Browser-facing realtime host. Empty -> the browser uses the host
+        # it loaded the dashboard from. Never a container name.
+        - PUSHER_HOST=${PUSHER_HOST:-}
         - PUSHER_PORT=${PUSHER_PORT:-6001}
 
         - SSH_MUX_ENABLED=false
@@ -58,58 +60,37 @@ services:
         - /data/coolify/databases:/var/www/html/storage/app/databases
         - /data/coolify/services:/var/www/html/storage/app/services
         - /data/coolify/backups:/var/www/html/storage/app/backups
+        - /data/coolify/images:/var/www/html/storage/app/images
         - /data/coolify/webhooks-during-maintenance:/var/www/html/storage/app/webhooks-during-maintenance
       networks:
-        - coolify
+        coolify:
+          # Since Coolify 4.4 realtime (Laravel Reverb, :6001) and the web
+          # terminal (:6002) run INSIDE this container. The alias keeps the
+          # old "coolify-realtime" name resolvable for existing proxy routes.
+          aliases:
+            - coolify-realtime
       healthcheck:
-        test: curl --fail http://127.0.0.1:8080/api/health || exit 1
+        test: curl --fail http://127.0.0.1:8080/api/health && curl --fail http://127.0.0.1:6001/up || exit 1
         interval: 5s
-        retries: 10
+        retries: 24
+        start_period: 1m
         timeout: 2s
       depends_on:
         database-server:
           condition: service_healthy
         redis-server:
           condition: service_healthy
-        coolify-realtime:
-          condition: service_healthy
       expose:
         - 8080/tcp
+        - 6001/tcp
+        - 6002/tcp
       ports:
         - "${APPLICATION_PORT:-8000}:8080"
+        - "${REALTIME_PORT:-6001}:6001/tcp"
+        - "${TERMINAL_PORT:-6002}:6002/tcp"
 
 
   ### Support Services ###
-  coolify-realtime:
-    image: ghcr.io/coollabsio/coolify-realtime:${SOCKETI_VERSION:-latest}
-    restart: unless-stopped
-    container_name: coolify-realtime
-    labels:
-      - com.centurylinklabs.watchtower.enable=true
-    expose:
-      - 6001/tcp
-      - 6002/tcp
-    ports:
-      - "${REALTIME_PORT:-6001}:6001/tcp"
-      - "${TERMINAL_PORT:-6002}:6002/tcp"
-    environment:
-      - TZ=${TIME_ZONE:-UTC}
-
-      - APP_NAME=coolify
-      - SOKETI_DEBUG=false
-      - SOKETI_DEFAULT_APP_ID=${PUSHER_APP_ID}
-      - SOKETI_DEFAULT_APP_KEY=${PUSHER_APP_KEY}
-      - SOKETI_DEFAULT_APP_SECRET=${PUSHER_APP_SECRET}
-    volumes:
-      - /data/coolify/ssh:/var/www/html/storage/app/ssh
-    networks:
-      - coolify
-    healthcheck:
-      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:6001/ready && wget -qO- http://127.0.0.1:6002/ready || exit 1" ]
-      interval: 5s
-      retries: 10
-      timeout: 2s
-
   database-server:
     image: postgres:${POSTGRES_VERSION:-18}
     restart: unless-stopped

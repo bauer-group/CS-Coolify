@@ -67,7 +67,7 @@ print_banner
 echo "[1/6] Creating folder structure..."
 
 # Coolify data folders (mapped into container)
-mkdir -p /data/coolify/{ssh,applications,databases,backups,services}
+mkdir -p /data/coolify/{ssh,applications,databases,backups,services,images}
 mkdir -p /data/coolify/ssh/{keys,mux}
 
 # Coolify host folders (for dynamically created containers via SSH)
@@ -208,7 +208,7 @@ ENVFILE
         echo "REDIS_PASSWORD=$GEN_REDIS_PASSWORD"
         echo ""
         echo "###############################################################################"
-        echo "# PUSHER/SOKETI (Realtime) - Required"
+        echo "# PUSHER (Realtime, served by the coolify container) - Required"
         echo "# PUSHER_HOST must be reachable from browser (IP or FQDN, NOT container name)"
         echo "###############################################################################"
         echo "PUSHER_APP_ID=$GEN_PUSHER_APP_ID"
@@ -234,7 +234,6 @@ ENVFILE
 #COOLIFY_VERSION=latest
 #POSTGRES_VERSION=18
 #REDIS_VERSION=8
-#SOCKETI_VERSION=latest
 
 ###############################################################################
 # TIMEZONE - Optional (automatically detected from host)

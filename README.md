@@ -13,23 +13,18 @@ A production-ready, self-hosted deployment of [Coolify](https://coolify.io) with
 ## Architecture
 
 ```
-                                    +------------------+
-                                    |    Watchtower    |
-                                    |  (Auto-Updates)  |
-                                    +------------------+
-                                             |
-+------------------+    +------------------+ | +------------------+
-|     Coolify      |    |      Soketi      | | |    PostgreSQL    |
-|   Application    |--->|    (Realtime)    | | |    (Database)    |
-|    Port 8000     |    |   Ports 6001/2   | | |                  |
-+------------------+    +------------------+ | +------------------+
-         |                                   |          |
-         +-----------------------------------+----------+
-                              |
-                    +------------------+
-                    |      Redis       |
-                    |     (Cache)      |
-                    +------------------+
+                               +------------------+
+                               |    Watchtower    |
+                               |  (Auto-Updates)  |
+                               +------------------+
++------------------------+     +------------------+
+|        Coolify         |---->|    PostgreSQL    |
+|  App        :8000      |     |    (Database)    |
+|  Realtime   :6001      |     +------------------+
+|  Terminal   :6002      |     +------------------+
+|                        |---->|      Redis       |
++------------------------+     |     (Cache)      |
+                               +------------------+
 ```
 
 ## Quick Start
@@ -97,7 +92,7 @@ sudo ./coolify.sh start
 - Linux server (Ubuntu 24.04 LTS recommended)
 - Docker 20.10+ with Compose v2
 - Root access
-- Ports: 8000 (Coolify), 6001-6002 (Soketi/Realtime)
+- Ports: 8000 (Coolify), 6001 (Realtime), 6002 (Terminal)
 
 ## File Structure
 
@@ -279,9 +274,9 @@ Edit `/opt/coolify/.env` to customize:
 | `PUSHER_HOST` | (server IP) | WebSocket host - must be reachable from browser |
 | `PUSHER_PORT` | 6001 | WebSocket port (use 443 for HTTPS/Traefik) |
 | `APPLICATION_PORT` | 8000 | Coolify web interface port |
-| `REALTIME_PORT` | 6001 | Soketi realtime port |
-| `TERMINAL_PORT` | 6002 | Web terminal port |
-| `COOLIFY_VERSION` | latest | Coolify image version |
+| `REALTIME_PORT` | 6001 | Host port for realtime (Reverb, inside the coolify container) |
+| `TERMINAL_PORT` | 6002 | Host port for the web terminal (inside the coolify container) |
+| `COOLIFY_VERSION` | latest | Coolify image version (this compose needs 4.4.0 or newer) |
 | `POSTGRES_VERSION` | 18 | PostgreSQL version |
 | `REDIS_VERSION` | 8 | Redis version |
 | `TIME_ZONE` | (from host) | Container timezone |
@@ -292,6 +287,10 @@ Edit `/opt/coolify/.env` to customize:
 ### WebSocket Configuration
 
 Coolify uses WebSockets for realtime updates (port 6001) and web terminal (port 6002).
+Since Coolify 4.4 both are served by the `coolify` container itself (Laravel
+Reverb and the terminal server); the separate `coolify-realtime` (Soketi)
+container is gone. `./coolify.sh start` and `./coolify.sh update` remove a
+leftover `coolify-realtime` container automatically.
 
 **HTTP access (`:8000`):**
 
@@ -311,6 +310,9 @@ When using HTTPS, Traefik automatically routes:
 
 - `/app` → `coolify-realtime:6001` (realtime)
 - `/terminal/ws` → `coolify-realtime:6002` (terminal)
+
+`coolify-realtime` is a network alias of the `coolify` container, so these
+routes keep working unchanged.
 
 ### Container Network Subnet
 
@@ -401,8 +403,7 @@ docker stop coolify-watchtower
 
 | Container | Image | Purpose |
 |-----------|-------|---------|
-| coolify | ghcr.io/coollabsio/coolify | Main application |
-| coolify-realtime | ghcr.io/coollabsio/coolify-realtime | WebSocket server (Soketi) |
+| coolify | ghcr.io/coollabsio/coolify | Main application, realtime (Reverb) and web terminal |
 | coolify-db | postgres:18 | PostgreSQL database |
 | coolify-redis | redis:8 | Cache and queue |
 | coolify-watchtower | containrrr/watchtower | Auto-update service |
