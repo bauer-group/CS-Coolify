@@ -4,6 +4,12 @@ All notable changes to this project are documented here. This file is maintained
 automatically by [semantic-release](https://github.com/semantic-release/semantic-release)
 on every release to `main`.
 
+## [0.16.1](https://github.com/bauer-group/CS-Coolify/compare/v0.16.0...v0.16.1) (2026-10-10)
+
+### 🐛 Bug Fixes
+
+* **setup:** stopped adding a dead SSH key on every re-run ([8e4f800](https://github.com/bauer-group/CS-Coolify/commit/8e4f80044f64d3619d7d5514c4e9ad9788ec2224))
+
 ## [0.16.0](https://github.com/bauer-group/CS-Coolify/compare/v0.15.0...v0.16.0) (2026-10-10)
 
 ### 🚀 Features
