@@ -67,12 +67,16 @@ else
         print_success "No local changes to stash"
         STASHED=false
     else
-        git stash push -m "auto-stash before update $(date +%Y%m%d-%H%M%S)"
+        # Identity inline: a stash is a commit, and root on a server
+        # usually has no git user configured.
+        git -c user.name="coolify-update" -c user.email="root@localhost" \
+            stash push -m "auto-stash before update $(date +%Y%m%d-%H%M%S)"
         print_success "Local changes stashed"
         STASHED=true
     fi
 
     echo "[2/3] Pulling latest changes..."
+    PRE_PULL=$(git rev-parse HEAD)
     if git pull; then
         print_success "Repository updated"
     else
@@ -89,8 +93,15 @@ else
         if git stash pop; then
             print_success "Local changes restored"
         else
-            print_warning "Merge conflict - your changes are in 'git stash list'"
-            echo "    Resolve manually with: git stash show -p | git apply"
+            # Never leave conflict markers in docker-compose.yml or the
+            # scripts: go back to the previous, consistent state instead.
+            print_error "Local changes conflict with the update - reverted to ${PRE_PULL:0:7}"
+            git reset -q --hard "$PRE_PULL"
+            if ! git stash pop -q; then
+                print_error "Re-apply your local changes manually: git stash list"
+            fi
+            echo "    Merge your changes into the new version, then run the update again."
+            exit 1
         fi
     else
         print_success "No changes to restore"
@@ -122,5 +133,8 @@ echo -e "${BLUE}Branch:${NC}  $BRANCH"
 echo -e "${BLUE}Commit:${NC}  $COMMIT"
 echo ""
 
-echo -e "${YELLOW}Next:${NC} Run './coolify.sh update' to update Docker images"
-echo ""
+# Called from `coolify.sh update`, which continues on its own.
+if [ -z "${COOLIFY_UPDATE_CHAINED:-}" ]; then
+    echo -e "${YELLOW}Next:${NC} Run './coolify.sh update' to update Docker images"
+    echo ""
+fi

@@ -5,8 +5,6 @@ services:
       image: ghcr.io/coollabsio/coolify:${COOLIFY_VERSION:-latest}
       container_name: coolify
       restart: unless-stopped
-      labels:
-        - com.centurylinklabs.watchtower.enable=true
       environment:
         - TZ=${TIME_ZONE:-UTC}
 
@@ -43,6 +41,10 @@ services:
 
         - SSH_MUX_ENABLED=false
         - SELF_HOSTED=true
+        # Coolify's built-in updater runs the upstream upgrade.sh against
+        # /data/coolify/source -- a different stack layout. Updates of this
+        # stack go through `coolify.sh update` (weekly systemd timer).
+        - AUTOUPDATE=false
 
         - ROOT_USERNAME=${ROOT_USERNAME}
         - ROOT_USER_EMAIL=${ROOT_USER_EMAIL}
@@ -95,8 +97,6 @@ services:
     image: postgres:${POSTGRES_VERSION:-18}
     restart: unless-stopped
     container_name: coolify-db
-    labels:
-      - com.centurylinklabs.watchtower.enable=true
     command: -c max_connections=${DATABASE_POOLMAXSIZE:-100}
     environment:
       - TZ=${TIME_ZONE:-UTC}
@@ -121,8 +121,6 @@ services:
     image: redis:${REDIS_VERSION:-8}
     restart: unless-stopped
     container_name: coolify-redis
-    labels:
-      - com.centurylinklabs.watchtower.enable=true
     command: >
       redis-server
       --port 6379
@@ -146,26 +144,6 @@ services:
       interval: 5s
       retries: 10
       timeout: 2s
-
-
-  ### Auto-Update Service ###
-  watchtower:
-    image: marrrrrrrrry/watchtower:latest
-    restart: unless-stopped
-    container_name: coolify-watchtower
-    # labels:
-    #   - com.centurylinklabs.watchtower.enable=true
-    environment:
-      - TZ=${TIME_ZONE:-UTC}
-      - WATCHTOWER_CLEANUP=true
-      - WATCHTOWER_INCLUDE_STOPPED=false
-      - WATCHTOWER_ROLLING_RESTART=true
-      - WATCHTOWER_LABEL_ENABLE=true
-      - WATCHTOWER_SCHEDULE=0 0 3 * * 6
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    networks:
-      - coolify
 
 
 ### Networks ###

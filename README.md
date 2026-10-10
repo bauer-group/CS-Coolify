@@ -6,17 +6,13 @@ A production-ready, self-hosted deployment of [Coolify](https://coolify.io) with
 
 - **One-command setup** - Automated folder structure, SSH keys, and secure credential generation
 - **Online backup/restore** - Consistent backups without downtime using `pg_dump` and Redis `BGSAVE`
-- **Auto-updates** - Weekly container updates via Watchtower (Saturdays at 3:00 AM)
+- **Safe auto-updates** - Weekly systemd timer (Saturdays at 3:00 AM): repository, images, migrations, verification and automatic rollback
 - **IPv6 ready** - Dual-stack network configuration out of the box
 - **Security focused** - Proper file permissions, no default passwords, read-only config mounts
 
 ## Architecture
 
 ```
-                               +------------------+
-                               |    Watchtower    |
-                               |  (Auto-Updates)  |
-                               +------------------+
 +------------------------+     +------------------+
 |        Coolify         |---->|    PostgreSQL    |
 |  App        :8000      |     |    (Database)    |
@@ -145,7 +141,8 @@ sudo ./coolify.sh <command>
 | `restart` | Restart all containers |
 | `status` | Show container status and access URL |
 | `logs [service]` | Show logs (all or specific service) |
-| `update` | Pull latest images and recreate containers |
+| `update` | Update repository and images, apply migrations, verify; rolls back on failure |
+| `autoupdate [status\|enable\|disable]` | Manage the weekly unattended update (systemd timer) |
 | `backup` | Create online backup (stack must be running) |
 | `restore <file>` | Restore from backup (stack must be stopped) |
 | `destroy` | Remove all containers and volumes |
@@ -389,15 +386,62 @@ database, not in `.env`, so the setup scripts intentionally leave it unset.
 
 ### Auto-Updates
 
-Watchtower automatically updates containers weekly:
-- **Schedule**: Every Saturday at 03:00 (server timezone)
-- **Scope**: Only containers with `com.centurylinklabs.watchtower.enable=true` label
-- **Behavior**: Rolling restart, automatic cleanup of old images
+`sudo ./coolify.sh update` is the one update path, used manually and by a
+weekly systemd timer (**Saturday 03:00**, server timezone, up to 15 minutes
+random delay; a missed run is caught up after boot). Every stable Coolify
+release is picked up (`COOLIFY_VERSION=latest`).
 
-To disable auto-updates, remove or stop the watchtower service:
+What one run does:
+
+1. **Repository** - `update.sh` pulls this repository, then the update
+   continues with the freshly pulled `coolify.sh` and `docker-compose.yml`.
+   Local edits that conflict with the update are not merged: the repository
+   stays on its previous state and the run stops
+2. **Images** - validates compose file and `.env`, pulls all images.
+   Nothing new: the run ends here, without backup or restarts
+3. **Backup** - full online backup
+   (`/data/system/backups/coolify_backup_preupdate_*.tar.gz`, the newest 4
+   are kept); the running Coolify image is kept as `coolify:pre-update`
+4. **Containers** - `docker compose up --wait`, so database and Redis are
+   healthy before Coolify starts and runs its migrations
+5. **Migrations** - `doctor.sh fix`: applies outstanding migrations
+   explicitly, rebuilds the caches, restarts the queue workers, verifies
+6. **Verification** - all containers healthy, no pending migrations
+
+If step 4-6 fails, the update **rolls back**: the database is restored from
+the pre-update backup (one transaction - all or nothing) and the previous
+Coolify version is started again - for a version before 4.4 in its previous
+layout, with the `coolify-realtime` container. Containers this stack no
+longer uses (`coolify-realtime`, `coolify-watchtower`) are only removed
+after a successful update. The run is reported as failed; a timer that was
+not enabled before is not switched on by a failed run.
+
+A stopped stack is not updated (the run is skipped). Started from a terminal,
+`coolify.sh update` runs as a transient systemd unit and shows its log, so a
+dropped SSH connection or Ctrl+C does not interrupt it
+(`journalctl -u coolify-update-manual-*`).
+
 ```bash
-docker stop coolify-watchtower
+sudo ./coolify.sh autoupdate             # status, next run
+sudo ./coolify.sh autoupdate disable     # manual updates only
+sudo ./coolify.sh autoupdate enable
+journalctl -u coolify-update.service -n 200   # log of the last run
 ```
+
+The timer is installed by `coolify.sh start` and `coolify.sh update` and
+is not re-enabled once you disabled it.
+
+> **Why not Watchtower?** Watchtower swaps images container by container,
+> ignores `depends_on`/healthchecks and runs no migrations. Coolify migrates
+> on container start but ignores a failure there, so a run that restarted
+> PostgreSQL or Redis at the same time left the schema behind
+> ("Undefined column"). Compose changes, such as the move of realtime into
+> the coolify container in 4.4, never reached the host either.
+
+Coolify's own updater (Settings → Update, `AUTOUPDATE`) is switched off in
+`docker-compose.yml`: it runs the upstream `upgrade.sh` against
+`/data/coolify/source`, a different stack layout. Do not use the update
+button in the dashboard.
 
 ## Services
 
@@ -406,7 +450,6 @@ docker stop coolify-watchtower
 | coolify | ghcr.io/coollabsio/coolify | Main application, realtime (Reverb) and web terminal |
 | coolify-db | postgres:18 | PostgreSQL database |
 | coolify-redis | redis:8 | Cache and queue |
-| coolify-watchtower | containrrr/watchtower | Auto-update service |
 
 ## Optional: Hardened Traefik Proxy
 
@@ -437,9 +480,10 @@ and disk usage. See [Diagnostics & Repair](#diagnostics--repair).
 
 ### "Undefined column", blank pages or 500 errors after an update
 
-The database migrations of the new image have not been applied. This is the
-single most common failure mode of this stack, because Watchtower replaces the
-container image without anyone running the migrations afterwards.
+The database migrations of the new image have not been applied. Coolify
+migrates on container start but ignores a failure there. `coolify.sh update`
+therefore applies and verifies them explicitly; an image updated by other
+means (e.g. a manual `docker pull` + restart) can still end up here.
 
 ```bash
 sudo ./doctor.sh fix --dry-run   # shows the SQL that is missing
@@ -615,9 +659,9 @@ git stash pop                # Reapply local changes (may need manual merge)
 
 ### Update Container Images
 
-Container images are updated automatically by Watchtower every Saturday at 03:00.
-
-To update manually:
+Updates run automatically every Saturday at 03:00, see
+[Auto-Updates](#auto-updates). To update right away (repository, images,
+migrations):
 
 ```bash
 sudo ./coolify.sh update
