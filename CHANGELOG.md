@@ -1,3 +1,23 @@
+# Changelog
+
+All notable changes to this project are documented here. This file is maintained
+automatically by [semantic-release](https://github.com/semantic-release/semantic-release)
+on every release to `main`.
+
+## [0.16.0](https://github.com/bauer-group/CS-Coolify/compare/v0.15.0...v0.16.0) (2026-10-10)
+
+### 🚀 Features
+
+* **update:** replaced Watchtower with a compose-native update path ([0b38f55](https://github.com/bauer-group/CS-Coolify/commit/0b38f55cfd67fb2c303e978d6e7172a86e25170d))
+
+### 🐛 Bug Fixes
+
+* **stack:** moved realtime into the coolify container for Coolify 4.4 ([567553b](https://github.com/bauer-group/CS-Coolify/commit/567553b9f2ddb8b1b936e5a83a67d38dbde2d8e4))
+
+### 🔧 Maintenance
+
+* **ci:** removed issue AI summary workflow ([263a6f9](https://github.com/bauer-group/CS-Coolify/commit/263a6f9b3789c63ce14b4c77642f2a1345c0dbde)), references [bauer-group/automation-templates#105](https://github.com/bauer-group/automation-templates/issues/105)
+
 ## [0.15.0](https://github.com/bauer-group/CS-Coolify/compare/v0.14.2...v0.15.0) (2026-08-16)
 
 ### 🚀 Features
