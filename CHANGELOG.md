@@ -4,6 +4,12 @@ All notable changes to this project are documented here. This file is maintained
 automatically by [semantic-release](https://github.com/semantic-release/semantic-release)
 on every release to `main`.
 
+## [0.17.0](https://github.com/bauer-group/CS-Coolify/compare/v0.16.1...v0.17.0) (2026-10-10)
+
+### 🚀 Features
+
+* **proxy:** aligned hardened proxy with Coolify 4.4 traffic analytics ([ae46b61](https://github.com/bauer-group/CS-Coolify/commit/ae46b619ebe8b2c39b988ebf7edfdd53fd2e8f2b))
+
 ## [0.16.1](https://github.com/bauer-group/CS-Coolify/compare/v0.16.0...v0.16.1) (2026-10-10)
 
 ### 🐛 Bug Fixes
