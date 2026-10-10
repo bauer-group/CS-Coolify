@@ -4,6 +4,16 @@ All notable changes to this project are documented here. This file is maintained
 automatically by [semantic-release](https://github.com/semantic-release/semantic-release)
 on every release to `main`.
 
+## [0.18.0](https://github.com/bauer-group/CS-Coolify/compare/v0.17.0...v0.18.0) (2026-10-10)
+
+### 🚀 Features
+
+* **doctor:** added storage growth checks and a daily health check ([34c8859](https://github.com/bauer-group/CS-Coolify/commit/34c8859d982cc1ad19e99a481ec2b2f39c13d01b))
+
+### 🐛 Bug Fixes
+
+* **stack:** bounded the Coolify log with daily rotation ([6af28fb](https://github.com/bauer-group/CS-Coolify/commit/6af28fbefa1c9fcaa6be7d17d2131a8f8475625f))
+
 ## [0.17.0](https://github.com/bauer-group/CS-Coolify/compare/v0.16.1...v0.17.0) (2026-10-10)
 
 ### 🚀 Features
