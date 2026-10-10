@@ -242,9 +242,10 @@ makes Sentinel fall back to the spoofable leftmost `X-Forwarded-For` entry.
   (the live file plus 5 gzipped rotations of ~20 MiB of log lines each), so on
   quiet hosts that can mean months. **Disabling analytics deletes nothing** —
   remove `/data/coolify/proxy/access.log*` yourself if needed.
-- Sentinel keeps the aggregates (hourly 30 days, daily 395 days by default,
-  configurable on the Analytics page) including the full IP as a top-N
-  dimension.
+- Sentinel keeps daily aggregates for 395 days by default ("Daily retention" on
+  the Analytics page) including the full IP as a top-N dimension. Minute and
+  hourly rows are folded into them within 1-3 days ("Hourly retention" is only a
+  fallback if that fails).
 - **"Client IP addresses: Anonymized/Off" has no effect yet**: Sentinel 1.0.2
   ignores the setting and stores full IPs; support (including purging stored
   IPs) arrives with Sentinel 1.0.3+. "Off" only hides the IP breakdown in the
@@ -252,6 +253,20 @@ makes Sentinel fall back to the spoofable leftmost `X-Forwarded-For` entry.
 - Document the processing (lawful basis, retention) in your records of
   processing and privacy notice, or keep analytics off on hosts where that is
   not settled.
+
+### Disk usage
+
+| Data | Path | Bound |
+| --- | --- | --- |
+| Raw access log | `/data/coolify/proxy/access.log` + `.1-.5.gz` | Sidecar checks every 60 s and rotates above 20 MiB. Under sustained load the live file reaches *traffic × 60 s* first (measured: ~1 KB per request, 3,700 req/s → ~240 MB), and a rotation briefly needs a second uncompressed copy. Rotations compress ~27:1. Only bounded while the sidecar runs |
+| Traffic aggregates | `/data/coolify/sentinel/analytics.sqlite` | Daily rows × "Daily retention" (395 days), top-50/200 per dimension. Grows for ~13 months, then levels off: roughly 25-250 MB per app (quiet to busy). SQLite never shrinks the file. Not capped: distinct `Host` header spellings, so an attacker can add rows |
+| Server/container metrics | `/data/coolify/sentinel/metrics.sqlite` (+ `-wal`) | "Metrics history days" (default 7): ~20 MB per container |
+| GeoIP database | `/data/coolify/sentinel/geoip-*.mmdb` | One file, 3-8 MB |
+| Container logs (Traefik, sidecar, Sentinel) | Docker json-file | 50 MB × 5, 1 MB × 2, and `daemon.json` (10 MB × 3) |
+
+Nothing here watches free space. Coolify's own disk alert (80 %) checks `/`
+only and only fires with a notification channel configured; `../doctor.sh check`
+reports `/data` and `/var/lib/docker` when run.
 
 ---
 
