@@ -114,26 +114,80 @@ done
 
 #######################################
 # 3. Generate SSH key (if not exists)
+#
+# On its first start Coolify imports id.root@host.docker.internal into its
+# database and then rewrites the key directory from there (ssh_key@<uuid>),
+# deleting the original file. A missing id.root file therefore does not
+# mean "no key": what matters is whether Coolify's key is authorized for
+# root. Generating one anyway would only add a dead authorized_keys entry
+# on every run - Coolify ignores the new file and deletes it on its next
+# start.
 #######################################
 echo "[3/6] Checking SSH keys..."
 
-SSH_KEY="/data/coolify/ssh/keys/id.root@host.docker.internal"
+SSH_KEYS_DIR="/data/coolify/ssh/keys"
+SSH_KEY="$SSH_KEYS_DIR/id.root@host.docker.internal"
 
-if [ ! -f "$SSH_KEY" ]; then
+key_is_authorized() {
+    local pub
+    [ -f ~/.ssh/authorized_keys ] || return 1
+    pub=$(ssh-keygen -y -P '' -f "$1" 2>/dev/null | awk '{print $2}')
+    [ -n "$pub" ] && grep -qF "$pub" ~/.ssh/authorized_keys
+}
+
+authorize_key() {
+    mkdir -p ~/.ssh
+    chmod 700 ~/.ssh
+    ssh-keygen -y -P '' -f "$1" >> ~/.ssh/authorized_keys
+    sort -u ~/.ssh/authorized_keys -o ~/.ssh/authorized_keys
+    chmod 600 ~/.ssh/authorized_keys
+}
+
+coolify_key_authorized() {
+    local key
+    for key in "$SSH_KEYS_DIR"/*; do
+        case "$key" in *.pub|*.lock) continue ;; esac
+        [ -f "$key" ] || continue
+        key_is_authorized "$key" && return 0
+    done
+    return 1
+}
+
+db_running() {
+    docker ps --format '{{.Names}}' 2>/dev/null | grep -qx coolify-db
+}
+
+# The key file Coolify uses for localhost (private key id 0) - only known
+# while the database runs.
+localhost_key_file() {
+    local uuid
+    db_running || return 1
+    uuid=$(docker exec coolify-db psql -U coolify -d coolify -tAc \
+        "SELECT uuid FROM private_keys WHERE id = 0" 2>/dev/null) || return 1
+    # Interpolated into a path below: accept a plain id only.
+    printf '%s' "$uuid" | grep -Eq '^[a-z0-9]+$' || return 1
+    [ -f "$SSH_KEYS_DIR/ssh_key@$uuid" ] || return 1
+    echo "$SSH_KEYS_DIR/ssh_key@$uuid"
+}
+
+if coolify_key_authorized; then
+    print_warning "SSH key already set up (authorized for root)"
+elif LOCALHOST_KEY=$(localhost_key_file); then
+    authorize_key "$LOCALHOST_KEY"
+    print_success "Coolify's localhost key authorized for root"
+elif [ -f "$SSH_KEY" ]; then
+    authorize_key "$SSH_KEY"
+    print_success "Existing SSH key authorized for root"
+elif ls "$SSH_KEYS_DIR"/ssh_key@* >/dev/null 2>&1 && ! db_running; then
+    # Coolify keeps its key in the database; which file is the localhost
+    # key is only known while the database runs.
+    print_warning "Coolify's SSH key is not authorized for root - the localhost connection will fail."
+    echo "    Start the stack and run setup.sh again to authorize it."
+else
     echo "    Generating SSH key..."
     ssh-keygen -f "$SSH_KEY" -t ed25519 -N '' -C root@coolify
-
-    # Add public key to authorized_keys
-    mkdir -p ~/.ssh
-    cat "${SSH_KEY}.pub" >> ~/.ssh/authorized_keys
-
-    # Remove duplicates
-    sort -u ~/.ssh/authorized_keys -o ~/.ssh/authorized_keys
-
-    chmod 600 ~/.ssh/authorized_keys
+    authorize_key "$SSH_KEY"
     print_success "SSH key created and authorized_keys updated"
-else
-    print_warning "SSH key already exists"
 fi
 
 #######################################
