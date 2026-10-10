@@ -255,6 +255,10 @@ each filesystem once) the check watches what grows on the host:
 
 The storage figures need root (`/data/coolify` is mode `0700`).
 
+Coolify's own log is bounded by the stack: `docker-compose.yml` sets
+`LOG_CHANNEL=daily`, so Coolify writes one `laravel-<date>.log` per day and keeps
+14 (Coolify's default `single` channel writes one `laravel.log` that grows until
+the container is recreated). `doctor.sh logs` always reads the newest file.
 
 > The journal is the only output — nothing sends a message. For an alert, set up
 > a notification channel in Coolify (its disk alert at 80 % watches `/` only),

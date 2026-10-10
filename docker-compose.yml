@@ -9,6 +9,10 @@ services:
         - TZ=${TIME_ZONE:-UTC}
 
         - APP_ENV=production
+        # Daily log files, 14 kept (fixed in Coolify's config/logging.php).
+        # The default `stack` -> `single` channel writes one laravel.log that
+        # grows until the container is recreated.
+        - LOG_CHANNEL=daily
         - PHP_MEMORY_LIMIT=${COOLIFY_PHP_MEMORY_LIMIT:-256M}
         - PHP_FPM_PM_CONTROL=${COOLIFY_PHP_FPM_PM_CONTROL:-dynamic}
         - PHP_FPM_PM_START_SERVERS=${COOLIFY_PHP_FPM_PM_START_SERVERS:-2}
