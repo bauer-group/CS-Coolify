@@ -460,11 +460,13 @@ TLS-options toolbox for your apps — that preserves Coolify's routing contract
 (container name, `coolify` network, `http`/`https` entrypoints, `letsencrypt`
 resolver) byte-for-byte.
 
-It is entirely opt-in and does not affect the control-plane stack above. Because
-Coolify treats the proxy compose as a generated artifact, part of the hardening
-is durable and part reverts on a proxy regeneration — see
-[`proxy/README.md`](proxy/README.md) for the durable-vs-best-effort split,
-install steps, and rollback.
+It is entirely opt-in and does not affect the control-plane stack above. It
+already contains Coolify 4.4's traffic-analytics block (access log + log
+rotation sidecar), so enabling analytics in the dashboard keeps the hardening.
+Because Coolify treats the proxy compose as a generated artifact, part of the
+hardening reverts on a proxy regeneration — see
+[`proxy/README.md`](proxy/README.md) for what survives which action, the
+analytics and privacy notes, install steps, and rollback.
 
 ## Troubleshooting
 

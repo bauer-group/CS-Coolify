@@ -7,23 +7,34 @@
 # (Server -> Proxy -> Dynamic Configurations). See ./README.md for full steps.
 #
 # -----------------------------------------------------------------------------
-# READ THIS FIRST -- Coolify OWNS this file, not you.
+# READ THIS FIRST -- Coolify OWNS this file, not you. (Verified: Coolify 4.4.6)
 # -----------------------------------------------------------------------------
-# Coolify treats the proxy compose as a GENERATED artifact. On a proxy
-# REGENERATION (server revalidation, forced regenerate, empty config, or a
-# proxy-type change) Coolify rebuilds the WHOLE compose from its hardcoded
-# template and preserves ONLY custom `command:` flags whose prefix is not
-# template-owned. Everything else -- image, ports, volumes, healthcheck,
-# labels, restart, extra_hosts, networks, cap_drop, security_opt,
-# oom_score_adj, logging, stop_grace_period -- is reverted to Coolify stock.
-# (Documented behaviour: coollabsio/coolify issue #3018.)
+# What Coolify does with the saved proxy compose:
+#   Save / Start / Restart / server validation
+#       -> stores and uses this text VERBATIM (comments included).
+#   Traffic-analytics toggle (Server -> Analytics)
+#       -> parses this file, adds/removes the analytics block, writes it back.
+#          All keys survive, but ALL COMMENTS ARE LOST (YAML re-serialised).
+#   "Reset configuration", proxy-type change, empty config
+#       -> REGENERATION: rebuilds the compose from Coolify's template. It is
+#          meant to keep custom `command:` flags whose prefix is not
+#          template-owned, but Coolify 4.4.6 drops ALL of them on "Reset
+#          configuration" (it regenerates without reading the saved config --
+#          verified in a sandbox). Everything in this file reverts to stock.
 #
 # What that means for the hardening below:
-#   [DURABLE]      survives regeneration -> custom command: flags (timeouts)
-#                  + everything in ./dynamic/ (TLS options + middlewares)
-#   [BEST-EFFORT]  holds through normal restarts, reverts to Coolify stock on
-#                  a full regeneration. Harmless if reverted (falls back to a
-#                  working, unhardened proxy). Re-paste this file to restore.
+#   [DURABLE]      everything in ./dynamic/ -- survives even a regeneration
+#                  (the global TLS policy keeps applying; the bg-default
+#                  middleware is then defined but no longer wired).
+#   [DURABLE ADD]  custom flags: survive save/restart/analytics toggles; lost
+#                  on "Reset configuration" in Coolify 4.4.6 (see above).
+#   [BEST-EFFORT]  compose keys: survive save/restart/analytics toggles,
+#                  revert to Coolify stock on a regeneration.
+#   Anything reverted is harmless (a working, unhardened proxy). After a
+#   "Reset configuration", re-paste this file and restart the proxy.
+#   [COOLIFY-MANAGED] the traffic-analytics block (end of `command:` + the
+#                  traefik-logrotate service). Keep it exactly as written while
+#                  analytics is ON; delete both marked blocks if it is OFF.
 #
 # The load-bearing Coolify contract (container name, `coolify` network,
 # `http`/`https` entrypoints, `letsencrypt` HTTP-01 resolver, docker + file
@@ -47,11 +58,9 @@ services:
     # collides on ports 80/443. Never change.
     container_name: coolify-proxy
 
-    # [BEST-EFFORT] Pinned to v3.7 (tested). Coolify's template default is
-    # currently v3.6 -- on a full regeneration Coolify reverts this to its
-    # template version. Re-paste to restore v3.7, or upgrade Coolify so its
-    # template ships v3.7+. Floating `traefik:v3` would auto-track v3 minors
-    # but Coolify would still overwrite it on regen.
+    # [BEST-EFFORT] Pinned to v3.7 (tested) -- the same version Coolify 4.4's
+    # template ships. Coolify never changes the image of a saved config; only
+    # a regeneration sets it to the template version.
     image: traefik:v3.7
     restart: unless-stopped
 
@@ -66,14 +75,21 @@ services:
     # -------------------------------------------------------------------------
     # [BEST-EFFORT] Container-level hardening (reverts to stock on regen).
     # -------------------------------------------------------------------------
-    # Traefik needs exactly one Linux capability -- NET_BIND_SERVICE to bind
-    # the privileged ports 80/443. Everything else is dropped. Docker-socket
-    # access works because the container runs as root (uid 0 == socket owner),
-    # which needs no DAC_OVERRIDE. Matches the BAUER GROUP EDGEPROXY stack.
+    # Traefik keeps exactly two Linux capabilities, everything else is dropped:
+    #   NET_BIND_SERVICE  bind the privileged ports 80/443
+    #   DAC_OVERRIDE      read/write /traefik. setup.sh and Coolify's own
+    #                     installer create /data/coolify/proxy as 9999:root 0700;
+    #                     without this capability root cannot even list it ->
+    #                     no dynamic config (every router errors on the missing
+    #                     bg-default@file), no acme.json, no access log.
+    #                     The only other mount is docker.sock, which is root-
+    #                     equivalent anyway, so this adds no real exposure.
+    # Docker-socket access needs no capability: uid 0 == socket owner.
     cap_drop:
       - ALL
     cap_add:
       - NET_BIND_SERVICE
+      - DAC_OVERRIDE
     security_opt:
       - no-new-privileges:true
     # Graceful drain window for in-flight requests on stop/restart.
@@ -135,9 +151,9 @@ services:
     # -------------------------------------------------------------------------
     # [KEEP] = Coolify template-owned flags. Reproduced verbatim so a regen is
     #          a no-op for them. Removing/renaming these breaks Coolify or apps.
-    # [DURABLE ADD] = BAUER GROUP additions whose prefix is NOT template-owned,
-    #          so Coolify's extractCustomProxyCommands() PRESERVES them across
-    #          regeneration. This is the durable command-flag hardening surface.
+    # [DURABLE ADD] = BAUER GROUP additions whose prefix is NOT template-owned.
+    #          Coolify's extractCustomProxyCommands() is meant to preserve them
+    #          on regeneration; 4.4.6's "Reset configuration" loses them anyway.
     #
     # Do NOT try to add extra cert resolvers here (e.g. a DNS-01 cloudflare
     # resolver): the `--certificatesresolvers.` prefix is template-owned, so
@@ -148,8 +164,8 @@ services:
       # ---- Healthcheck ping endpoint (consumed by healthcheck below) --------
       # `--ping=true` matches the template prefix `--ping=` -> [KEEP] (regen
       # no-op). `--ping.entrypoint=http` does NOT start with `--ping=` (it's
-      # `--ping.`), so Coolify PRESERVES it as a custom flag -> [DURABLE]. Same
-      # net effect either way; distinguished here only for precision.
+      # `--ping.`), so Coolify treats it as a custom flag. The 4.4 template
+      # ships it too, so the net effect is the same either way.
       - "--ping=true"
       - "--ping.entrypoint=http"
 
@@ -184,9 +200,8 @@ services:
       - "--certificatesresolvers.letsencrypt.acme.storage=/traefik/acme.json"
 
       # ---- [DURABLE ADD] respondingTimeouts (per entrypoint) -----------------
-      # Prefix `--entrypoints.<ep>.transport.*` is NOT template-owned -> these
-      # survive Coolify regeneration. Values mirror the BAUER GROUP EDGEPROXY
-      # stack:
+      # Prefix `--entrypoints.<ep>.transport.*` is NOT template-owned (see
+      # [DURABLE ADD] above). Values mirror the BAUER GROUP EDGEPROXY stack:
       #   readTimeout=0s   no upper bound on request body -> large/slow uploads
       #                    (S3/MinIO multipart, mobile), long webhooks.
       #   writeTimeout=0s  no upper bound on response -> SSE / event-stream,
@@ -208,9 +223,8 @@ services:
       # every Coolify app AND Coolify's own UI/realtime routes -- with no
       # per-app labels (Coolify generates app labels itself, so an opt-in
       # toolbox would sit unused). Prefix `--entrypoints.<ep>.http.middlewares=`
-      # is NOT template-owned -> Coolify preserves these across regeneration,
-      # and Coolify sets no entrypoint middlewares itself, so there is no
-      # conflict.
+      # is NOT template-owned (see [DURABLE ADD] above), and Coolify sets no
+      # entrypoint middlewares itself, so there is no conflict.
       #
       # ---------------------------------------------------------------------
       # EXPECTED LOG NOISE -- do NOT "fix" this by dropping the http line.
@@ -251,25 +265,43 @@ services:
       - "--entrypoints.http.http.middlewares=bg-default@file"
       - "--entrypoints.https.http.middlewares=bg-default@file"
 
+      # ---- [COOLIFY-MANAGED] Traffic analytics (Coolify 4.4+) ---------------
+      # >>> BEGIN traffic analytics -- delete this block if analytics is OFF.
+      # Coolify's exact flag set (bootstrap/helpers/proxy.php,
+      # traefikAccessLogCommands): JSON access log at /traefik/access.log,
+      # which Sentinel tails (read-only mount) for Server -> Analytics.
+      # Keep the strings, their order and their position at the END of the
+      # list unchanged: with the complete set present, Coolify recognises it
+      # as its own -- a later analytics toggle replaces it instead of
+      # duplicating it, and disabling analytics removes it cleanly. Your own
+      # --accesslog.* flags would be hidden while analytics is on.
+      # Privacy: full client IP, X-Forwarded-For, User-Agent, Referer and the
+      # query string land in this file (see README -> Traffic analytics).
+      - "--accesslog=true"
+      - "--accesslog.filepath=/traefik/access.log"
+      - "--accesslog.format=json"
+      - "--accesslog.fields.headers.names.Cf-Connecting-Ip=keep"
+      - "--accesslog.fields.headers.names.Cf-Ipcountry=keep"
+      - "--accesslog.fields.headers.names.Cf-Cache-Status=keep"
+      - "--accesslog.fields.headers.names.Cf-Verified-Bot=keep"
+      - "--accesslog.fields.headers.names.Cf-Ray=keep"
+      - "--accesslog.fields.headers.names.X-Forwarded-For=keep"
+      - "--accesslog.fields.headers.names.User-Agent=keep"
+      - "--accesslog.fields.headers.names.Referer=keep"
+      # <<< END traffic analytics
+
     labels:
       # [HARD CONSTRAINT] Coolify management markers -- how Coolify recognises
       # this container as its managed proxy. Never remove.
-      - traefik.enable=true
       - coolify.managed=true
       - coolify.proxy=true
-      # NOTE: the stock template also adds a `traefik` dashboard router
-      # (traefik.http.routers.traefik.* -> api@internal). We omit it on purpose
-      # -> no dashboard route -> dashboard OFF.
-      #
-      # CAVEAT after a full regen: Coolify re-adds that router serving
-      # api@internal on the http/https entrypoints (NOT on :8080) with default
-      # rule Host(`coolify-proxy`) -- which is trivially forgeable via a spoofed
-      # Host header, so treat the dashboard as reachable again until you
-      # re-paste this compose. On PRODUCTION-mode Coolify the re-added stock
-      # keeps --api.insecure=false (the :8080 publish is then just a dead port);
-      # a DEVELOPMENT-mode Coolify instead sets --api.insecure=true and
-      # re-exposes the dashboard directly on :8080. Bottom line: re-paste the
-      # hardened compose promptly after any proxy regeneration.
+      # traefik.enable=false, as in Coolify 4.4's template: with `true` and no
+      # router labels, Traefik's docker provider builds a router for the proxy
+      # container ITSELF (Host(`traefik-coolify-proxy`)). Coolify identifies its
+      # proxy by container name + coolify.* labels, not by this label.
+      - traefik.enable=false
+      # No dashboard router at all -> dashboard OFF. Coolify 4.4 no longer adds
+      # one either (it even strips the legacy api@internal labels).
 
     healthcheck:
       # [HARD CONSTRAINT-ish] Kept identical to Coolify's stock check. Coolify's
@@ -279,3 +311,71 @@ services:
       interval: 4s
       timeout: 2s
       retries: 5
+
+  # >>> BEGIN traffic analytics -- delete this service if analytics is OFF.
+  # ---------------------------------------------------------------------------
+  # [COOLIFY-MANAGED] Access-log rotation for traffic analytics (Coolify 4.4+)
+  # ---------------------------------------------------------------------------
+  # Traefik's access log has no size limit, so Coolify runs this sidecar:
+  # above 20 MiB it copies access.log to access.log.1.gz and truncates it,
+  # keeping 5 rotations (copy-truncate is safe: Traefik appends with O_APPEND,
+  # Sentinel re-reads from 0 when the file shrinks). Service key, container
+  # name and script are Coolify's own -- keep them unchanged, otherwise an
+  # analytics toggle adds a second sidecar with the same container name.
+  # The hardening keys below are [BEST-EFFORT]: every analytics toggle or
+  # regeneration replaces this service with Coolify's stock definition.
+  traefik-logrotate:
+    container_name: coolify-proxy-logrotate
+    image: alpine:3.24
+    restart: unless-stopped
+    network_mode: none
+    volumes:
+      - /data/coolify/proxy/:/traefik
+    labels:
+      - coolify.managed=true
+    # [BEST-EFFORT] Same reasoning as for Traefik: root, but only
+    # DAC_OVERRIDE to work in the 9999:root 0700 proxy directory. Without it
+    # `stat` fails, the script reads size 0 and access.log grows unbounded.
+    cap_drop:
+      - ALL
+    cap_add:
+      - DAC_OVERRIDE
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    init: true
+    # No mem/pids limits on purpose: where the host cannot apply them
+    # (rootless Docker, nested cgroups) the sidecar would fail to start and
+    # make `compose up --wait` - and with it Coolify's proxy restart - fail.
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: "2"
+    # Coolify's rotation script, verbatim. `$$` is Compose's escape for a
+    # literal `$` -- keep it, or Compose interpolates the variables away.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |-
+        log="$${TRAEFIK_ACCESS_LOG:-/traefik/access.log}"
+        max_bytes="$${TRAEFIK_ACCESS_LOG_MAX_BYTES:-20971520}"
+        interval="$${TRAEFIK_ACCESS_LOG_ROTATE_INTERVAL:-60}"
+        keep=5
+        while true; do
+          size=$$(stat -c %s "$$log" 2>/dev/null || echo 0)
+          if [ "$$size" -gt "$$max_bytes" ]; then
+            rm -f "$$log.$$keep.gz"
+            i=$$((keep - 1))
+            while [ "$$i" -ge 1 ]; do
+              if [ -f "$$log.$$i.gz" ]; then mv -f "$$log.$$i.gz" "$$log.$$((i + 1)).gz"; fi
+              i=$$((i - 1))
+            done
+            if cp "$$log" "$$log.1"; then
+              : > "$$log"
+              gzip -f "$$log.1"
+            fi
+          fi
+          sleep "$$interval"
+        done
+  # <<< END traffic analytics

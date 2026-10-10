@@ -19,24 +19,28 @@ lives under `/data/coolify/proxy/`.
 ## ⚠️ Read this before you deploy: Coolify owns the proxy compose
 
 Coolify treats the proxy `docker-compose.yml` as a **generated artifact**, not
-a user-owned file. On a **proxy regeneration** — triggered by *server
-revalidation*, a *forced regenerate*, an *empty config*, or a *proxy-type
-change* — Coolify rebuilds the whole compose from its hardcoded template and
-preserves **only** custom `command:` flags whose prefix is not template-owned.
-(Verified against `coollabsio/coolify` source; documented in issue
-[#3018](https://github.com/coollabsio/coolify/issues/3018).)
+a user-owned file. What it does with the saved compose (verified against
+Coolify **4.4.6** source and in a sandbox):
 
-So the hardening splits into two durability classes:
+| Action | Effect on the saved compose |
+| --- | --- |
+| **Save**, start, restart, server validation | Used **verbatim**, comments included |
+| **Traffic analytics toggle** (Server → Analytics) | Parsed, the [analytics block](#traffic-analytics-coolify-44) added/removed, written back: every key survives, **all comments are lost** |
+| **Reset configuration**, proxy-type change, empty config | **Regenerated** from Coolify's template — everything reverts to stock |
 
-| Class | What | Survives a full regen? |
-| --- | --- | --- |
-| **DURABLE** | Everything in [`dynamic/bg-defaults.yml`](dynamic/bg-defaults.yml) (global middlewares + TLS policy) and the added `command:` flags (respondingTimeouts + the `bg-default@file` entrypoint wiring) | ✅ Yes |
-| **BEST-EFFORT** | Compose structure: `image` pin, dropped `8080`, `cap_drop`/`security_opt`, `oom_score_adj`, `logging`, `stop_grace_period` | ⚠️ Reverts to Coolify stock |
+Coolify is meant to keep custom `command:` flags on a regeneration, but 4.4.6's
+*Reset configuration* regenerates without reading the saved config, so it drops
+**all** of them (sandbox-verified). So the hardening splits into:
 
-**A best-effort revert is harmless** — you fall back to a working, unhardened
-Coolify proxy. To restore the hardening, just re-paste
-[`docker-compose.yml`](docker-compose.yml) and restart the proxy. (The DURABLE
-parts keep working through a regen regardless.)
+| Class | What | Survives a toggle? | Survives a reset? |
+| --- | --- | --- | --- |
+| **DURABLE** | Everything in [`dynamic/bg-defaults.yml`](dynamic/bg-defaults.yml) (global middlewares + TLS policy) | ✅ | ✅ (the TLS policy keeps applying; the middleware is no longer wired) |
+| **Compose** | Added `command:` flags (respondingTimeouts, `bg-default@file` wiring) and the compose structure (`image` pin, dropped `8080`, capabilities, `security_opt`, `oom_score_adj`, `logging`, `stop_grace_period`) | ✅ | ⚠️ Reverts to Coolify stock |
+
+**A revert is harmless** — you fall back to a working, unhardened Coolify
+proxy. To restore the hardening, re-paste
+[`docker-compose.yml`](docker-compose.yml) and restart the proxy. Every Save
+also keeps the previous file in `/data/coolify/proxy/backups/` (10 versions).
 
 The load-bearing Coolify contract is preserved **byte-for-byte**, so nothing
 about routing changes:
@@ -56,7 +60,8 @@ Coolify generates every app's Traefik labels itself, so nobody hand-adds `@file`
 middlewares — an opt-in toolbox would sit unused. Instead the defaults apply
 **globally**, to every router, with zero per-app configuration.
 
-**Durable (survives regeneration):**
+**Hardening defaults** (definitions in the durable dynamic file; the
+entrypoint wiring and the timeouts are compose flags — see the table above):
 
 - **Global default middlewares** ([`dynamic/bg-defaults.yml`](dynamic/bg-defaults.yml)),
   wired at both entrypoints so they hit every app **and** Coolify's own
@@ -120,13 +125,20 @@ Two documented benign log lines beat losing that masking. Apps that redirect
 HTTP→HTTPS are unaffected either way — Traefik generates the 30x itself, so no
 backend header is ever exposed on that path.
 
-**Best-effort (reverts on regeneration):**
+**Compose structure (reverts on regeneration):**
 
-- Traefik pinned to **v3.7** (replaces Coolify's older template default)
+- Traefik pinned to **v3.7** (the version Coolify 4.4's template ships)
 - **Dashboard OFF** — no `8080` publish, no dashboard router (stock exposes a
   dead `:8080` port with `--api.insecure=false`). Coolify does not need it — it
   tracks proxy status by Docker container state, not the Traefik API.
-- `cap_drop: ALL` + only `NET_BIND_SERVICE`, `no-new-privileges`
+- `traefik.enable=false` (as in Coolify 4.4) — with `true`, Traefik's docker
+  provider builds a router for the proxy container itself
+- `cap_drop: ALL` + only `NET_BIND_SERVICE` and `DAC_OVERRIDE`,
+  `no-new-privileges`. `DAC_OVERRIDE` is required: `setup.sh` and Coolify's
+  installer create `/data/coolify/proxy` as `9999:root 0700`, and without it
+  root cannot read `dynamic/` or `acme.json` (every router errors, no
+  certificates) — sandbox-verified. The only other mount is the Docker socket,
+  which is root-equivalent anyway.
 - `oom_score_adj: -50` (BAUER GROUP OOM hierarchy)
 - non-blocking **json-file logging** with rotation (stock sets none)
 - `stop_grace_period: 30s`
@@ -156,6 +168,14 @@ our `tls.options.default` is authoritative, and only the `gzip` /
 Coolify UI → **Server → Proxy → Configuration** → replace the editor contents
 with [`docker-compose.yml`](docker-compose.yml) → **Save** → **Restart Proxy**.
 
+The file contains the [traffic analytics](#traffic-analytics-coolify-44) block.
+**Analytics off?** Delete both marked blocks first (between
+`>>> BEGIN traffic analytics` and `<<< END traffic analytics`):
+
+```bash
+sed '/>>> BEGIN traffic analytics/,/<<< END traffic analytics/d' docker-compose.yml
+```
+
 ### 3. Verify
 
 ```bash
@@ -168,10 +188,70 @@ curl -sI https://<one-of-your-app-domains> | grep -iE 'strict-transport|server:|
 
 # an existing app still serves + renews certs
 curl -I https://<one-of-your-app-domains>
+
+# Traefik can read its directory (must print nothing)
+docker logs coolify-proxy 2>&1 | grep -iE 'permission denied|access logger'
 ```
 
 If a response is missing those headers, or apps return 404/500, the dynamic
 file probably isn't installed — re-check step 1.
+
+---
+
+## Traffic analytics (Coolify 4.4+)
+
+Coolify 4.4 added traffic analytics (Server → Analytics): Traefik writes a JSON
+access log to `/data/coolify/proxy/access.log`, Coolify's Sentinel tails it
+read-only, and a small `traefik-logrotate` sidecar rotates it (above 20 MiB,
+5 gzipped rotations). Turning analytics on or off makes Coolify add or remove
+exactly two things in the saved compose — 11 `--accesslog*` flags at the end of
+`command:` and the `traefik-logrotate` service — and restart the proxy.
+
+[`docker-compose.yml`](docker-compose.yml) already contains both, in Coolify's
+exact form (marked `>>> BEGIN / <<< END traffic analytics`), so it stays a
+fix-point (sandbox-verified against Coolify 4.4.6):
+
+| Situation | Result |
+| --- | --- |
+| Analytics **on**, file pasted | Saved verbatim; Traefik logs, Sentinel ingests, hardened sidecar rotates |
+| Toggle afterwards (off, on) | Coolify removes/re-adds the block **without duplicates**; all hardening keys survive, **comments are lost**, the sidecar's own hardening reverts to Coolify's stock sidecar |
+| Analytics **off** | Delete both marked blocks before pasting (see [Install](#2-proxy-compose-hardened)) — otherwise Traefik keeps writing an access log nobody reads |
+
+> Re-pasting the file after a toggle restores comments and the hardened
+> sidecar. Do **not** paste a version without the block while analytics is on:
+> Coolify does not re-add it on Save, and analytics silently stays empty until
+> the next toggle.
+
+Keep the block unchanged: the flag strings, their order at the end of
+`command:`, the service key `traefik-logrotate`, its container name and the
+`$$` escaping in the script. With the complete set present Coolify treats it as
+its own; a different service key would make the next toggle add a second
+sidecar with the same container name. Whenever Coolify applies the block
+(toggle, reset) it replaces your own `--accesslog.*` flags with its set.
+
+Behind Cloudflare no extra Traefik setting is needed: Sentinel takes the
+visitor IP from `Cf-Connecting-Ip` when the connecting peer is a Cloudflare
+address. Do **not** add `forwardedHeaders.trustedIPs` for Sentinel's sake — it
+makes Sentinel fall back to the spoofable leftmost `X-Forwarded-For` entry.
+
+### Privacy (GDPR)
+
+- `access.log` and its rotations hold, per request, the full client IP (plus
+  `X-Forwarded-For` / `Cf-Connecting-Ip`), User-Agent, full Referer and the
+  request path **including the query string**. Retention is by size only
+  (the live file plus 5 gzipped rotations of ~20 MiB of log lines each), so on
+  quiet hosts that can mean months. **Disabling analytics deletes nothing** —
+  remove `/data/coolify/proxy/access.log*` yourself if needed.
+- Sentinel keeps the aggregates (hourly 30 days, daily 395 days by default,
+  configurable on the Analytics page) including the full IP as a top-N
+  dimension.
+- **"Client IP addresses: Anonymized/Off" has no effect yet**: Sentinel 1.0.2
+  ignores the setting and stores full IPs; support (including purging stored
+  IPs) arrives with Sentinel 1.0.3+. "Off" only hides the IP breakdown in the
+  UI.
+- Document the processing (lawful basis, retention) in your records of
+  processing and privacy notice, or keep analytics off on hosts where that is
+  not settled.
 
 ---
 
@@ -206,19 +286,16 @@ logs or the app's generated labels).
 
 ## Rollback to Coolify stock
 
-> **The DURABLE parts do not roll back by pasting the stock compose.** That is
-> the flip side of durability: `--entrypoints.*.http.middlewares=` is a custom
-> flag, so Coolify carries it into the regenerated compose. The editor then
-> shows stock while the running container still has the flag — verify with
-> `docker inspect coolify-proxy --format '{{json .Args}}'`, not with the editor.
-> Same for `bg-defaults.yml`: it lives in the dynamic dir and a compose rollback
-> never touches it, so its `tls.options.default` keeps applying to every https
-> router under the stock compose too. Roll both back explicitly.
+> **`bg-defaults.yml` does not roll back with the compose.** It lives in the
+> dynamic dir, so its `tls.options.default` keeps applying to every https router
+> under the stock compose too. Roll it back explicitly — after the compose.
 
-1. Remove both `--entrypoints.*.http.middlewares=bg-default@file` lines from the
-   proxy compose (Server → Proxy → Configuration) → Restart Proxy — or
-   *Reset to default* / trigger a server revalidation to restore stock wholesale.
-   Confirm they are gone from the *running container's* args, not just the editor.
+1. Server → Proxy → Configuration → **Reset configuration** → Restart Proxy.
+   In Coolify 4.4.6 this restores the stock compose wholesale, including the
+   removal of the `bg-default@file` entrypoint flags (traffic analytics stays as
+   configured). Confirm with
+   `docker inspect coolify-proxy --format '{{json .Args}}'` — the running
+   container counts, not the editor.
 2. **Only then** delete `bg-defaults.yml` in Server → Proxy → Dynamic
    Configurations. Order matters: never leave the entrypoint flags pointing at a
    deleted middleware, or every router errors.
@@ -234,11 +311,12 @@ logs or the app's generated labels).
   (Wildcards still work app-side if you bring the cert another way.)
 - **No mounted static `traefik.yml`.** Coolify is CLI-args-only; a static
   config file is not read. All static settings must be `command:` flags.
-- **`--accesslog.*` / `--log.level=` are template-owned** → a custom filtered
-  access log doesn't survive regen, so it's intentionally left out.
-- **Version pin is best-effort** — a regen reverts `image:` to Coolify's
-  template version. To make v3.7+ permanent, upgrade Coolify so its template
-  ships it.
+- **Access log = Coolify's.** `--accesslog.*` and `--log.level=` are
+  template-owned, and every analytics toggle or reset replaces custom
+  `--accesslog.*` flags with Coolify's set. A custom filtered access log (e.g.
+  without query strings) is therefore best-effort at most.
+- **Version pin is best-effort** — a regen sets `image:` to Coolify's template
+  version (v3.7 in Coolify 4.4).
 
 ---
 
