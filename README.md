@@ -176,14 +176,14 @@ Coolify fails with `Undefined column ...` or a blank page until they are.
 
 | Command | Description |
 |---------|-------------|
-| `check` | Read-only diagnosis. Exits `1` when a problem was found (cron/monitoring safe) |
+| `check` | Read-only diagnosis incl. storage growth and disk usage. Exits `1` when a problem was found (cron/monitoring safe). Runs daily, see [Daily health check](#daily-health-check) |
 | `fix` | Guided repair: backup → migrations → caches → queue workers → verification |
 | `migrate` | Apply pending database migrations only |
 | `cache` | Clear and rebuild the Laravel caches only (`optimize:clear` + `optimize`) |
 | `workers` | Restart the queue workers (`horizon:terminate`, fallback `queue:restart`) |
 | `artisan <args>` | Run any artisan command inside the Coolify container |
 | `psql [sql]` | Open a psql shell, or run a single statement |
-| `logs [lines]` | Show the Laravel application log (default: 100 lines) |
+| `logs [lines]` | Show the newest Laravel log file (default: 100 lines) |
 | `help` | Show help |
 
 | Option | Description |
@@ -228,6 +228,37 @@ sudo ./doctor.sh fix
 # Cron, CI, or a piped shell: no terminal, so --force is required
 sudo ./doctor.sh fix --yes --force
 ```
+
+### Daily health check
+
+A systemd timer runs `doctor.sh check` every day at 06:00 (installed and
+enabled by `coolify.sh start`/`update`, like the update timer). The output goes
+to the journal; when the check finds a problem the unit ends **failed**, so it
+shows up in `systemctl --failed` and in `sudo ./coolify.sh autoupdate`.
+
+```bash
+journalctl -u coolify-check.service -n 60      # last check
+systemctl disable --now coolify-check.timer    # turn it off (stays off)
+```
+
+Besides health, migrations and disk usage (`/`, `/data`, `/var/lib/docker`,
+each filesystem once) the check watches what grows on the host:
+
+| Check | Problem (exit 1) | Warning | Threshold variable |
+|-------|------------------|---------|--------------------|
+| Access log rotation | Traefik writes an access log but `coolify-proxy-logrotate` is not running | | |
+| Proxy access log | | Live file above the threshold | `ACCESS_LOG_WARN_MB` (500) |
+| Sentinel data (`/data/coolify/sentinel`) | | Above the threshold | `SENTINEL_WARN_MB` (5120) |
+| Laravel logs (container) | | Above the threshold | `LARAVEL_LOG_WARN_MB` (500) |
+| Backups (`/data/system/backups`) | | Above the threshold (manual backups and doctor dumps are never pruned) | `BACKUP_WARN_MB` (10240) |
+| Disk | 90 % used | 80 % used | |
+
+The storage figures need root (`/data/coolify` is mode `0700`).
+
+
+> The journal is the only output — nothing sends a message. For an alert, set up
+> a notification channel in Coolify (its disk alert at 80 % watches `/` only),
+> or hook the failed unit into your monitoring.
 
 ### Safety backup
 
@@ -422,7 +453,7 @@ dropped SSH connection or Ctrl+C does not interrupt it
 (`journalctl -u coolify-update-manual-*`).
 
 ```bash
-sudo ./coolify.sh autoupdate             # status, next run
+sudo ./coolify.sh autoupdate             # status, next run (+ daily health check)
 sudo ./coolify.sh autoupdate disable     # manual updates only
 sudo ./coolify.sh autoupdate enable
 journalctl -u coolify-update.service -n 200   # log of the last run

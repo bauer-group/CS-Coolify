@@ -33,6 +33,12 @@ set -euo pipefail
 #   COOLIFY_DB_NAME             (default: coolify)
 #   COOLIFY_DB_USER             (default: coolify)
 #   BACKUP_DIR                  (default: /data/system/backups)
+#   PROXY_DIR                   (default: /data/coolify/proxy)
+#   SENTINEL_DIR                (default: /data/coolify/sentinel)
+#   ACCESS_LOG_WARN_MB          (default: 500)    `check` warns above these
+#   SENTINEL_WARN_MB            (default: 5120)
+#   LARAVEL_LOG_WARN_MB         (default: 500)
+#   BACKUP_WARN_MB              (default: 10240)
 #######################################
 
 #######################################
@@ -44,19 +50,32 @@ COOLIFY_REDIS_CONTAINER="${COOLIFY_REDIS_CONTAINER:-coolify-redis}"
 COOLIFY_DB_NAME="${COOLIFY_DB_NAME:-coolify}"
 COOLIFY_DB_USER="${COOLIFY_DB_USER:-coolify}"
 BACKUP_DIR="${BACKUP_DIR:-/data/system/backups}"
+PROXY_DIR="${PROXY_DIR:-/data/coolify/proxy}"
+SENTINEL_DIR="${SENTINEL_DIR:-/data/coolify/sentinel}"
+ACCESS_LOG_WARN_MB="${ACCESS_LOG_WARN_MB:-500}"
+SENTINEL_WARN_MB="${SENTINEL_WARN_MB:-5120}"
+LARAVEL_LOG_WARN_MB="${LARAVEL_LOG_WARN_MB:-500}"
+BACKUP_WARN_MB="${BACKUP_WARN_MB:-10240}"
+PROXY_CONTAINER="coolify-proxy"
+LOGROTATE_CONTAINER="coolify-proxy-logrotate"
 
 APP_DIR="/var/www/html"
-LARAVEL_LOG="$APP_DIR/storage/logs/laravel.log"
+LOG_DIR="$APP_DIR/storage/logs"
 CONFIG_CACHE="$APP_DIR/bootstrap/cache/config.php"
 
 #######################################
 # Colors and Output
 #######################################
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
+# Plain text when not on a terminal (e.g. the daily check in the journal)
+if [ -t 1 ]; then
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    BLUE='\033[0;34m'
+    NC='\033[0m'
+else
+    RED='' GREEN='' YELLOW='' BLUE='' NC=''
+fi
 
 print_header() {
     echo ""
@@ -99,8 +118,11 @@ Usage:
   sudo ./doctor.sh <command> [options]
 
 Commands:
-  check                  Read-only diagnosis of the whole stack.
+  check                  Read-only diagnosis of the whole stack, including
+                         storage growth (access log + rotation, Sentinel data,
+                         Laravel logs, backups) and disk usage.
                          Exits 1 when a problem was found (cron/monitoring safe).
+                         Runs daily via coolify-check.timer.
   fix                    Guided post-update repair:
                          backup -> migrations -> caches -> queue workers -> verify
   migrate                Apply pending database migrations only
@@ -108,7 +130,7 @@ Commands:
   workers                Restart the queue workers (Horizon) only
   artisan <args...>      Run any artisan command inside the Coolify container
   psql [sql]             Open a psql shell, or run a single statement
-  logs [lines]           Show the Laravel application log (default: 100 lines)
+  logs [lines]           Show the newest Laravel log file (default: 100 lines)
   help                   Show this help
 
 Options (for check / fix / migrate / cache / workers):
@@ -216,6 +238,40 @@ confirm() {
     read -r -p "$prompt" answer </dev/tty || answer=""
     answer="${answer:-$default}"
     case "$answer" in [YyJj]*) return 0 ;; *) return 1 ;; esac
+}
+
+# Newest Laravel log: laravel.log (single channel) or laravel-<date>.log
+# (daily channel, as set in docker-compose.yml). Empty when none exists.
+laravel_log() {
+    docker exec "$COOLIFY_CONTAINER" sh -c \
+        "ls -1t '$LOG_DIR'/laravel*.log 2>/dev/null | head -n 1" 2>/dev/null || true
+}
+
+# Size of a host path in MiB, empty when it cannot be read (not root).
+size_mb() {
+    du -sm "$1" 2>/dev/null | awk '{print $1}' || true
+}
+
+# check_size <label> <path> <warn MiB> [hint]
+check_size() {
+    local label="$1" path="$2" warn="$3" hint="${4:-}" mb
+    if [ ! -e "$path" ]; then
+        # /data/coolify is 0700: without root a path there looks missing.
+        if [ -x "$(dirname "$path")" ]; then
+            check_info "$label" "not present"
+        else
+            check_info "$label" "not readable (run as root)"
+        fi
+        return 0
+    fi
+    mb=$(size_mb "$path")
+    if [ -z "$mb" ]; then
+        check_info "$label" "not readable (run as root)"
+    elif [ "$mb" -ge "$warn" ]; then
+        check_warn "$label" "${mb} MiB (above ${warn} MiB)${hint:+ - $hint}"
+    else
+        check_ok "$label" "${mb} MiB"
+    fi
 }
 
 #######################################
@@ -580,9 +636,10 @@ do_check() {
         check_warn "horizon" "status unavailable - check './doctor.sh logs'"
     fi
 
-    local errors
+    local errors log_file
+    log_file=$(laravel_log)
     errors=$(docker exec "$COOLIFY_CONTAINER" sh -c \
-        "tail -n 500 '$LARAVEL_LOG' 2>/dev/null | grep -c 'ERROR' || true" 2>/dev/null || printf '0')
+        "tail -n 500 '${log_file:-/dev/null}' 2>/dev/null | grep -c 'ERROR' || true" 2>/dev/null || printf '0')
     errors="${errors:-0}"
     if [ "$errors" -gt 0 ] 2>/dev/null; then
         check_warn "recent log errors" "$errors ERROR lines in the last 500"
@@ -590,19 +647,28 @@ do_check() {
         check_ok "recent log errors" "none in the last 500 lines"
     fi
 
+    ##### Storage #####
+    print_section "Storage"
+    check_storage
+
     ##### Resources #####
     print_section "Resources"
-    local mount usage
-    for mount in /data /var/lib/docker; do
+    # Each filesystem once, labelled by its mount point: / is what Coolify's
+    # own disk alert watches, /data and /var/lib/docker are what fills up.
+    local mount fs usage seen=" "
+    for mount in / /data /var/lib/docker; do
         [ -d "$mount" ] || continue
+        fs=$(df -P "$mount" 2>/dev/null | awk 'NR==2 {print $6}') || fs=""
         usage=$(df -P "$mount" 2>/dev/null | awk 'NR==2 {gsub(/%/,"",$5); print $5}') || usage=""
-        [ -n "$usage" ] || continue
+        [ -n "$fs" ] && [ -n "$usage" ] || continue
+        case "$seen" in *" $fs "*) continue ;; esac
+        seen="$seen$fs "
         if [ "$usage" -ge 90 ]; then
-            check_fail "disk $mount" "${usage}% used"
+            check_fail "disk $fs" "${usage}% used"
         elif [ "$usage" -ge 80 ]; then
-            check_warn "disk $mount" "${usage}% used"
+            check_warn "disk $fs" "${usage}% used"
         else
-            check_ok "disk $mount" "${usage}% used"
+            check_ok "disk $fs" "${usage}% used"
         fi
     done
 
@@ -625,6 +691,62 @@ do_check() {
         echo "    sudo ./doctor.sh fix"
     fi
     return 1
+}
+
+# What grows on this host, and whether its bound is in place.
+check_storage() {
+    local access_log="$PROXY_DIR/access.log" logging=false proxy_args rotations rot_mb mb files
+
+    # Traffic analytics: Traefik writes the access log only with --accesslog;
+    # only the logrotate sidecar keeps it from growing without limit.
+    # Captured, not piped into `grep -q`: with pipefail an early grep exit
+    # can SIGPIPE the writer and turn a match into a false negative.
+    proxy_args=$(docker inspect -f '{{json .Args}}' "$PROXY_CONTAINER" 2>/dev/null) || proxy_args=""
+    if [[ "$proxy_args" == *'"--accesslog=true"'* ]]; then
+        logging=true
+        if container_running "$LOGROTATE_CONTAINER"; then
+            check_ok "access log rotation" "$LOGROTATE_CONTAINER running"
+        else
+            check_fail "access log rotation" "$LOGROTATE_CONTAINER NOT running - access.log grows without limit"
+        fi
+    fi
+    if [ "$logging" = true ]; then
+        check_size "proxy access log" "$access_log" "$ACCESS_LOG_WARN_MB" \
+            "rotation is behind or not working"
+    elif [ -f "$access_log" ]; then
+        mb=$(size_mb "$access_log")
+        check_info "proxy access log" "${mb:-?} MiB, not written (analytics off) - remove $PROXY_DIR/access.log* if unneeded"
+    fi
+    rotations=$(find "$PROXY_DIR" -maxdepth 1 -name 'access.log.*.gz' 2>/dev/null | wc -l) || rotations=0
+    if [ "$rotations" -gt 0 ]; then
+        rot_mb=$(du -cm "$PROXY_DIR"/access.log.*.gz 2>/dev/null | awk 'END {print $1}') || rot_mb="?"
+        check_info "access log rotations" "$rotations file(s), ${rot_mb} MiB"
+    fi
+
+    check_size "sentinel data" "$SENTINEL_DIR" "$SENTINEL_WARN_MB" \
+        "lower the retention on the server's Analytics / Charts pages"
+
+    # Laravel logs live in the container's writable layer.
+    if container_running "$COOLIFY_CONTAINER"; then
+        mb=$(docker exec "$COOLIFY_CONTAINER" du -sm "$LOG_DIR" 2>/dev/null | awk '{print $1}') || mb=""
+        files=$(docker exec "$COOLIFY_CONTAINER" sh -c "ls -1 '$LOG_DIR'/laravel-*.log 2>/dev/null | wc -l" 2>/dev/null) || files=0
+        if [ -z "$mb" ]; then
+            check_info "laravel logs" "size unknown"
+        elif [ "$mb" -ge "$LARAVEL_LOG_WARN_MB" ]; then
+            if [ "${files:-0}" -gt 0 ]; then
+                check_warn "laravel logs" "${mb} MiB (above ${LARAVEL_LOG_WARN_MB} MiB) in ${files} daily file(s)"
+            else
+                check_warn "laravel logs" "${mb} MiB (above ${LARAVEL_LOG_WARN_MB} MiB) in one unrotated laravel.log - apply LOG_CHANNEL=daily: sudo ./coolify.sh update"
+            fi
+        elif [ "${files:-0}" -gt 0 ]; then
+            check_ok "laravel logs" "${mb} MiB, ${files} daily file(s) (14 kept)"
+        else
+            check_ok "laravel logs" "${mb} MiB"
+        fi
+    fi
+
+    check_size "backups" "$BACKUP_DIR" "$BACKUP_WARN_MB" \
+        "manual backups and doctor dumps are never pruned"
 }
 
 #######################################
@@ -849,10 +971,12 @@ do_logs() {
     require_docker
     require_container "$COOLIFY_CONTAINER"
 
-    if docker exec "$COOLIFY_CONTAINER" test -f "$LARAVEL_LOG" 2>/dev/null; then
-        docker exec "$COOLIFY_CONTAINER" tail -n "$lines" "$LARAVEL_LOG"
+    local log_file
+    log_file=$(laravel_log)
+    if [ -n "$log_file" ]; then
+        docker exec "$COOLIFY_CONTAINER" tail -n "$lines" "$log_file"
     else
-        print_warning "$LARAVEL_LOG not found - showing container logs instead."
+        print_warning "No Laravel log in $LOG_DIR - showing container logs instead."
         docker logs --tail "$lines" "$COOLIFY_CONTAINER"
     fi
 }

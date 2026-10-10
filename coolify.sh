@@ -105,6 +105,10 @@ SYSTEMD_DIR="/etc/systemd/system"
 UPDATE_UNIT="coolify-update"
 UPDATE_SCHEDULE="Sat *-*-* 03:00:00"
 
+# Daily read-only health check (doctor.sh check)
+CHECK_UNIT="coolify-check"
+CHECK_SCHEDULE="*-*-* 06:00:00"
+
 is_stack_running() {
     # Check if all Coolify containers are running
     local running=0
@@ -206,7 +210,7 @@ do_start() {
 
     echo ""
     print_success "Coolify Stack started!"
-    ensure_update_timer || true
+    ensure_timers
     echo ""
     do_status
 }
@@ -630,7 +634,7 @@ do_update() {
             print_error "The stack did not become healthy - check: sudo ./doctor.sh check"
             exit 1
         fi
-        ensure_update_timer || true
+        ensure_timers
         return 0
     fi
 
@@ -687,13 +691,13 @@ do_update() {
         fi
         # Never switch a FRESH timer on after a failure - it would retry
         # within the hour while someone may still be investigating.
-        ensure_update_timer refresh || true
+        ensure_timers refresh
         exit 1
     fi
 
     remove_legacy_containers
     docker image prune -f >/dev/null || true
-    ensure_update_timer || true
+    ensure_timers
 
     echo ""
     print_success "Coolify Stack updated: $old_version -> $(coolify_version)"
@@ -733,8 +737,53 @@ WantedBy=timers.target
 EOF
 }
 
+write_check_units() {
+    cat > "$1/$CHECK_UNIT.service" <<EOF
+[Unit]
+Description=Coolify stack health check (doctor.sh check)
+After=docker.service
+
+[Service]
+Type=oneshot
+Environment=HOME=/root
+ExecStart=/bin/bash $SCRIPT_DIR/doctor.sh check
+TimeoutStartSec=15min
+EOF
+
+    cat > "$1/$CHECK_UNIT.timer" <<EOF
+[Unit]
+Description=Daily Coolify stack health check
+
+[Timer]
+OnCalendar=$CHECK_SCHEDULE
+Persistent=true
+RandomizedDelaySec=15min
+
+[Install]
+WantedBy=timers.target
+EOF
+}
+
 has_systemd() {
     command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]
+}
+
+# Copies the staged unit files that differ into place; true if any changed.
+sync_unit_files() {
+    local dir="$1" unit changed=false
+    shift
+    for unit in "$@"; do
+        if ! cmp -s "$dir/$unit" "$SYSTEMD_DIR/$unit"; then
+            cp "$dir/$unit" "$SYSTEMD_DIR/$unit"
+            changed=true
+        fi
+    done
+    [ "$changed" = true ]
+}
+
+ensure_timers() {
+    ensure_update_timer "$@" || true
+    ensure_check_timer || true
 }
 
 # Installs the timer on first use and keeps its unit files current. An
@@ -742,7 +791,7 @@ has_systemd() {
 #   $1 = "enable"   also enables and starts it
 #   $1 = "refresh"  only refreshes an existing timer, never installs one
 ensure_update_timer() {
-    local mode="${1:-}" fresh=false tmp unit changed=false
+    local mode="${1:-}" fresh=false tmp
     if ! has_systemd; then
         print_warning "systemd not available - weekly auto-update timer not installed"
         return 0
@@ -757,22 +806,41 @@ ensure_update_timer() {
 
     tmp=$(mktemp -d)
     write_update_units "$tmp"
-    for unit in "$UPDATE_UNIT.service" "$UPDATE_UNIT.timer"; do
-        if ! cmp -s "$tmp/$unit" "$SYSTEMD_DIR/$unit"; then
-            cp "$tmp/$unit" "$SYSTEMD_DIR/$unit"
-            changed=true
-        fi
-    done
-    rm -rf "$tmp"
-    if [ "$changed" = true ]; then
+    if sync_unit_files "$tmp" "$UPDATE_UNIT.service" "$UPDATE_UNIT.timer"; then
         systemctl daemon-reload || true
     fi
+    rm -rf "$tmp"
 
     if [ "$fresh" = true ] || [ "$mode" = "enable" ]; then
         if systemctl enable --now "$UPDATE_UNIT.timer" >/dev/null 2>&1; then
             print_success "Weekly auto-update enabled ($UPDATE_SCHEDULE)"
         else
             print_warning "Could not enable $UPDATE_UNIT.timer - check: systemctl status $UPDATE_UNIT.timer"
+        fi
+    fi
+}
+
+# Daily `doctor.sh check` into the journal; the unit ends "failed" when the
+# check finds a problem (visible in `systemctl --failed`). Installed on first
+# use and never re-enabled here: `systemctl disable --now coolify-check.timer`
+# sticks.
+ensure_check_timer() {
+    local fresh=false tmp
+    has_systemd || return 0
+
+    [ -f "$SYSTEMD_DIR/$CHECK_UNIT.timer" ] || fresh=true
+    tmp=$(mktemp -d)
+    write_check_units "$tmp"
+    if sync_unit_files "$tmp" "$CHECK_UNIT.service" "$CHECK_UNIT.timer"; then
+        systemctl daemon-reload || true
+    fi
+    rm -rf "$tmp"
+
+    if [ "$fresh" = true ]; then
+        if systemctl enable --now "$CHECK_UNIT.timer" >/dev/null 2>&1; then
+            print_success "Daily health check enabled ($CHECK_SCHEDULE)"
+        else
+            print_warning "Could not enable $CHECK_UNIT.timer - check: systemctl status $CHECK_UNIT.timer"
         fi
     fi
 }
@@ -794,12 +862,16 @@ do_autoupdate() {
                 print_warning "systemd not available"
                 return 0
             fi
-            local state
-            systemctl list-timers --all "$UPDATE_UNIT.timer" --no-pager || true
+            local state check_state check_result
+            systemctl list-timers --all "$UPDATE_UNIT.timer" "$CHECK_UNIT.timer" --no-pager || true
             echo ""
             state=$(systemctl is-enabled "$UPDATE_UNIT.timer" 2>/dev/null) || true
-            echo "Enabled: ${state:-no}"
-            echo "Last run log: journalctl -u $UPDATE_UNIT.service -n 100"
+            echo "Auto-update enabled: ${state:-no}"
+            echo "  Last run log: journalctl -u $UPDATE_UNIT.service -n 100"
+            check_state=$(systemctl is-enabled "$CHECK_UNIT.timer" 2>/dev/null) || true
+            check_result=$(systemctl show -p Result --value "$CHECK_UNIT.service" 2>/dev/null) || true
+            echo "Daily health check enabled: ${check_state:-no} (last result: ${check_result:-none})"
+            echo "  Last check: journalctl -u $CHECK_UNIT.service -n 60"
             ;;
         *)
             print_error "Usage: $0 autoupdate [status|enable|disable]"

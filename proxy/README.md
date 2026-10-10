@@ -264,9 +264,10 @@ makes Sentinel fall back to the spoofable leftmost `X-Forwarded-For` entry.
 | GeoIP database | `/data/coolify/sentinel/geoip-*.mmdb` | One file, 3-8 MB |
 | Container logs (Traefik, sidecar, Sentinel) | Docker json-file | 50 MB × 5, 1 MB × 2, and `daemon.json` (10 MB × 3) |
 
-Nothing here watches free space. Coolify's own disk alert (80 %) checks `/`
-only and only fires with a notification channel configured; `../doctor.sh check`
-reports `/data` and `/var/lib/docker` when run.
+The daily `doctor.sh check` (`coolify-check.timer`, see the main README) fails
+when the rotation sidecar is missing and warns about a large access log or
+Sentinel directory - into the journal only. Coolify's own disk alert (80 %)
+checks `/` only and only fires with a notification channel configured.
 
 ---
 
